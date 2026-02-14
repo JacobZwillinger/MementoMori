@@ -2,7 +2,7 @@
   "person": {
     "birthdate": "1987-08-17",
     "expectedLifespan": 80,
-    "timezone": "America/Los_Angeles"
+    "timezone": "America/New_York"
   },
   "specialDays": [
     {

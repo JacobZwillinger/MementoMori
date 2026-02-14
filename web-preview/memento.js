@@ -50,10 +50,15 @@ function calculateTotalWeeks(lifespan) {
     return lifespan * 52;
 }
 
-// Check if today is a special day
+// Check if today is a special day (using Eastern Time)
 function checkSpecialDay(date, specialDays) {
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
+    // Convert to Eastern Time (America/New_York) for special day detection
+    const options = { timeZone: 'America/New_York', month: '2-digit', day: '2-digit' };
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(date);
+
+    const month = parts.find(part => part.type === 'month').value;
+    const day = parts.find(part => part.type === 'day').value;
     const today = `${month}-${day}`;
 
     for (const specialDay of specialDays) {
