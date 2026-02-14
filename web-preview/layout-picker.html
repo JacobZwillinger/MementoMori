@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memento Mori - Layout Picker</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 40px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+        }
+        .layout-option {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .layout-option:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+        }
+        .layout-option.selected {
+            border: 3px solid #007bff;
+            box-shadow: 0 5px 20px rgba(0,123,255,0.3);
+        }
+        .layout-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .layout-description {
+            font-size: 0.9em;
+            color: #666;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        .canvas-container {
+            background: #000;
+            padding: 10px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: white;
+            display: block;
+        }
+        .select-btn {
+            margin-top: 15px;
+            width: 100%;
+            padding: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        .select-btn:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Memento Mori</h1>
+        <p class="subtitle">Choose your layout - Click to select, then use it in your main app</p>
+
+        <div class="grid">
+            <div class="layout-option" data-layout="spiral">
+                <div class="layout-title">1. Archimedean Spiral</div>
+                <div class="layout-description">Birth at center, life spirals outward. Organic growth pattern.</div>
+                <div class="canvas-container">
+                    <canvas id="canvas1" width="400" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="layout-option" data-layout="concentric">
+                <div class="layout-title">2. Concentric Circles</div>
+                <div class="layout-description">Like tree rings. Each ring is one year, 52 dots around.</div>
+                <div class="canvas-container">
+                    <canvas id="canvas2" width="400" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="layout-option" data-layout="fibonacci">
+                <div class="layout-title">3. Fibonacci Spiral</div>
+                <div class="layout-description">Golden ratio spiral. Mathematical beauty meets mortality.</div>
+                <div class="canvas-container">
+                    <canvas id="canvas3" width="400" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="layout-option" data-layout="circular">
+                <div class="layout-title">4. Single Circular Ring</div>
+                <div class="layout-description">All 4,160 weeks in one perfect circle. Simple, clean.</div>
+                <div class="canvas-container">
+                    <canvas id="canvas4" width="400" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="layout-option" data-layout="timeline">
+                <div class="layout-title">5. Horizontal Timeline</div>
+                <div class="layout-description">80 rows (years), 52 columns (weeks). Linear progression.</div>
+                <div class="canvas-container">
+                    <canvas id="canvas5" width="400" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="layout-option" data-layout="vertical">
+                <div class="layout-title">6. Vertical Columns</div>
+                <div class="layout-description">52 columns (weeks), 80 rows (years). Read top to bottom.</div>
+                <div class="canvas-container">
+                    <canvas id="canvas6" width="400" height="240"></canvas>
+                </div>
+            </div>
+
+            <div class="layout-option" data-layout="wave">
+                <div class="layout-title">7. Wave Pattern</div>
+                <div class="layout-description">Life flows like a wave. Rhythmic, organic movement.</div>
+                <div class="canvas-container">
+                    <canvas id="canvas7" width="400" height="240"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="layouts.js"></script>
+    <script>
+        // Render all layouts
+        const birthdate = "1987-08-17";
+        const birth = new Date(birthdate);
+        const now = new Date();
+        const diffMs = now - birth;
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        const weeksLived = Math.floor(diffDays / 7);
+        const totalWeeks = 80 * 52;
+
+        // Scale factor for preview canvases (half size)
+        const scale = 0.5;
+
+        const canvas1 = document.getElementById('canvas1');
+        const ctx1 = canvas1.getContext('2d');
+        ctx1.scale(scale, scale);
+        renderSpiral(ctx1, weeksLived, totalWeeks);
+
+        const canvas2 = document.getElementById('canvas2');
+        const ctx2 = canvas2.getContext('2d');
+        ctx2.scale(scale, scale);
+        renderConcentric(ctx2, weeksLived, totalWeeks);
+
+        const canvas3 = document.getElementById('canvas3');
+        const ctx3 = canvas3.getContext('2d');
+        ctx3.scale(scale, scale);
+        renderFibonacci(ctx3, weeksLived, totalWeeks);
+
+        const canvas4 = document.getElementById('canvas4');
+        const ctx4 = canvas4.getContext('2d');
+        ctx4.scale(scale, scale);
+        renderCircularProgress(ctx4, weeksLived, totalWeeks);
+
+        const canvas5 = document.getElementById('canvas5');
+        const ctx5 = canvas5.getContext('2d');
+        ctx5.scale(scale, scale);
+        renderTimeline(ctx5, weeksLived, totalWeeks);
+
+        const canvas6 = document.getElementById('canvas6');
+        const ctx6 = canvas6.getContext('2d');
+        ctx6.scale(scale, scale);
+        renderVerticalColumns(ctx6, weeksLived, totalWeeks);
+
+        const canvas7 = document.getElementById('canvas7');
+        const ctx7 = canvas7.getContext('2d');
+        ctx7.scale(scale, scale);
+        renderWave(ctx7, weeksLived, totalWeeks);
+
+        // Selection handling
+        document.querySelectorAll('.layout-option').forEach(option => {
+            option.addEventListener('click', function() {
+                document.querySelectorAll('.layout-option').forEach(o => o.classList.remove('selected'));
+                this.classList.add('selected');
+
+                const layout = this.dataset.layout;
+                console.log('Selected layout:', layout);
+                alert(`Layout "${layout}" selected!\n\nTo use this, I'll update your main app with this layout.`);
+            });
+        });
+    </script>
+</body>
+</html>

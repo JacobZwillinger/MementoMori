@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Special Days</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .test { margin: 20px 0; padding: 15px; border: 2px solid #ccc; }
+        .pass { border-color: green; background: #e8f5e9; }
+        .fail { border-color: red; background: #ffebee; }
+        canvas { border: 1px solid black; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Special Day Detection Test</h1>
+    <div id="results"></div>
+
+    <script>
+        const resultsDiv = document.getElementById('results');
+
+        // Copy the functions we need from memento.js
+        function checkSpecialDay(date, specialDays) {
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const today = `${month}-${day}`;
+
+            for (const specialDay of specialDays) {
+                if (specialDay.date === today) {
+                    return specialDay;
+                }
+            }
+            return null;
+        }
+
+        function renderSpecialDay(ctx, specialDay, weeksLived, totalWeeks) {
+            const DISPLAY_WIDTH = 800;
+            const DISPLAY_HEIGHT = 480;
+
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+            ctx.fillStyle = 'black';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            ctx.font = '36px serif';
+            const lines = wrapText(ctx, specialDay.quote, DISPLAY_WIDTH - 120);
+            const lineHeight = 50;
+            const startY = (DISPLAY_HEIGHT / 2) - ((lines.length - 1) * lineHeight / 2);
+
+            lines.forEach((line, index) => {
+                ctx.fillText(line, DISPLAY_WIDTH / 2, startY + (index * lineHeight));
+            });
+        }
+
+        function wrapText(ctx, text, maxWidth) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+
+            words.forEach(word => {
+                const testLine = currentLine + word + ' ';
+                const metrics = ctx.measureText(testLine);
+
+                if (metrics.width > maxWidth && currentLine !== '') {
+                    lines.push(currentLine.trim());
+                    currentLine = word + ' ';
+                } else {
+                    currentLine = testLine;
+                }
+            });
+
+            if (currentLine.trim() !== '') {
+                lines.push(currentLine.trim());
+            }
+
+            return lines;
+        }
+
+        // Test cases
+        const tests = [
+            { date: new Date(2026, 7, 17), expected: 'Your Birthday', desc: 'Aug 17 2026' },
+            { date: new Date(2027, 7, 17), expected: 'Your Birthday', desc: 'Aug 17 2027' },
+            { date: new Date(2026, 8, 26), expected: "Friend's Birthday", desc: 'Sep 26 2026' },
+            { date: new Date(2026, 0, 16), expected: 'January 16', desc: 'Jan 16 2026' },
+            { date: new Date(2026, 9, 16), expected: 'October 16', desc: 'Oct 16 2026' },
+            { date: new Date(2026, 1, 14), expected: null, desc: 'Feb 14 2026 (not special)' }
+        ];
+
+        // Load config and run tests
+        fetch('config.json')
+            .then(r => r.json())
+            .then(config => {
+                console.log('Config loaded:', config);
+
+                tests.forEach((test, i) => {
+                    const testDiv = document.createElement('div');
+                    testDiv.className = 'test';
+
+                    const specialDay = checkSpecialDay(test.date, config.specialDays);
+                    const actualTitle = specialDay ? specialDay.title : null;
+                    const passed = actualTitle === test.expected;
+
+                    testDiv.className += passed ? ' pass' : ' fail';
+
+                    let html = `<h3>Test ${i + 1}: ${test.desc}</h3>`;
+                    html += `<p><strong>Expected:</strong> ${test.expected || 'No special day'}</p>`;
+                    html += `<p><strong>Got:</strong> ${actualTitle || 'No special day'}</p>`;
+                    html += `<p><strong>Result:</strong> ${passed ? '✓ PASS' : '✗ FAIL'}</p>`;
+
+                    if (specialDay) {
+                        html += `<p><em>Quote: "${specialDay.quote}"</em></p>`;
+
+                        // Render it
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 800;
+                        canvas.height = 480;
+                        const ctx = canvas.getContext('2d');
+                        renderSpecialDay(ctx, specialDay, 2000, 4160);
+                        html += '<br>';
+                        testDiv.innerHTML = html;
+                        testDiv.appendChild(canvas);
+                    } else {
+                        testDiv.innerHTML = html;
+                    }
+
+                    resultsDiv.appendChild(testDiv);
+                });
+
+                // Summary
+                const passed = tests.filter(test => {
+                    const specialDay = checkSpecialDay(test.date, config.specialDays);
+                    const actualTitle = specialDay ? specialDay.title : null;
+                    return actualTitle === test.expected;
+                }).length;
+
+                const summary = document.createElement('div');
+                summary.style.cssText = 'margin-top: 30px; padding: 20px; background: #f5f5f5; font-size: 20px;';
+                summary.innerHTML = `<strong>Summary: ${passed}/${tests.length} tests passed</strong>`;
+                resultsDiv.insertBefore(summary, resultsDiv.firstChild);
+            })
+            .catch(err => {
+                resultsDiv.innerHTML = `<p style="color: red;">Failed to load config: ${err}</p>`;
+            });
+    </script>
+</body>
+</html>

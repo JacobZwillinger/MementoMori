@@ -1,0 +1,44 @@
+{
+  "person": {
+    "birthdate": "1987-08-17",
+    "expectedLifespan": 80,
+    "timezone": "America/Los_Angeles"
+  },
+  "specialDays": [
+    {
+      "date": "08-17",
+      "title": "Your Birthday",
+      "quote": "It is not that we have a short time to live, but that we waste much of it.\n— Seneca"
+    },
+    {
+      "date": "09-26",
+      "title": "Friend's Birthday",
+      "quote": "Never say about anything, 'I have lost it,' but only, 'I have returned it.'\n— Epictetus"
+    },
+    {
+      "date": "01-16",
+      "title": "January 16",
+      "quote": "You could leave life right now. Let that determine what you do and say and think.\n— Marcus Aurelius"
+    },
+    {
+      "date": "10-16",
+      "title": "October 16",
+      "quote": "He who fears death will never do anything worthy of a living man.\n— Seneca"
+    }
+  ],
+  "display": {
+    "updateHour": 0,
+    "updateMinute": 0,
+    "highlightCurrentWeek": true
+  },
+  "wifi": {
+    "ssid": "YOUR_SSID",
+    "password": "YOUR_PASSWORD",
+    "ntpServer": "pool.ntp.org",
+    "syncFrequency": 7
+  },
+  "power": {
+    "deepSleepEnabled": true,
+    "wifiDuringSleep": false
+  }
+}

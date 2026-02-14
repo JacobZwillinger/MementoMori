@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body>
+<canvas id="display" width="800" height="480"></canvas>
+<div id="output"></div>
+<script src="memento.js"></script>
+<script>
+// Force a special day
+currentDate = new Date(2027, 7, 17); // Aug 17, 2027
+setTimeout(() => {
+    const specialDay = checkSpecialDay(currentDate, config.specialDays);
+    document.getElementById('output').innerHTML = 
+        'Date: ' + currentDate.toLocaleDateString() + '<br>' +
+        'Special Day Found: ' + (specialDay ? specialDay.title : 'NONE') + '<br>' +
+        'Quote: ' + (specialDay ? specialDay.quote : 'N/A');
+}, 1000);
+</script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+# Node modules
+node_modules/
+
+# System files
+.DS_Store
+*.swp
+*.swo
+
+# Editor files
+.vscode/
+.idea/
+
+# Build artifacts
+*.pyc
+__pycache__/
+
+# Local test files
+web-preview/debug-test.html
+web-preview/verify-test.js

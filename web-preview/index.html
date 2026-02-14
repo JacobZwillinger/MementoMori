@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memento Mori - Preview</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Memento Mori</h1>
+            <p>Life in weeks - Preview for 800×480 e-paper display</p>
+        </div>
+
+        <div class="display-container">
+            <canvas id="display" width="800" height="480"></canvas>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="currentDate">Simulate Date:</label>
+                <input type="date" id="currentDate">
+                <button id="resetDate">Reset to Today</button>
+            </div>
+
+            <div class="info">
+                <div id="weeksInfo"></div>
+                <div id="specialDayInfo"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>This preview matches the exact 800×480 pixel resolution of the reTerminal E1001 display.</p>
+            <p>Each dot represents one week. 52 columns × 80 rows = 4,160 weeks (80 years).</p>
+        </div>
+    </div>
+
+    <script src="memento.js"></script>
+</body>
+</html>
