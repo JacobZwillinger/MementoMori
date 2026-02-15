@@ -1,40 +1,49 @@
 # Memento Mori
 
-A minimalist life visualization for the reTerminal E1001 7.5" e-paper display. Each dot represents one week of your life - a visual reminder that time is finite.
+A minimalist life visualization displaying your entire life as a grid of dots on an e-paper display. Each dot represents one week—a visual reminder that time is finite.
 
-## Concept
+## Overview
 
-- **52 columns** (weeks per year) × **80 rows** (years of life) = 4,160 weeks total
+**4,160 weeks. That's 80 years.**
+
+- **52 columns** (weeks per year) × **80 rows** (years of life)
 - **Filled dots**: weeks you've lived
-- **Unfilled dots**: weeks remaining (assuming 80-year lifespan)
-- **Special days**: On configured dates (birthday, memorial days), display shows a centered stoic quote instead of the grid
+- **Empty dots**: time remaining
+- **Special days**: Display Stoic quotes on configured dates
 
 ## Hardware
 
-- **Display**: reTerminal E1001 (800×480 monochrome e-paper)
-- **Processor**: ESP32-S3
-- **Battery Life**: 3+ months with daily midnight updates
-- **Update Schedule**: Daily at midnight, minimal power consumption via deep sleep
+- **Display**: reTerminal E1001 (800×480 e-paper, black and white)
+- **Orientations**: Horizontal (800×480) or Vertical (480×800)
+- **Processor**: Raspberry Pi CM4
+- **Power**: Deep sleep support for extended battery life
+
+## Design Philosophy
+
+Built with radical minimalism and UX principles:
+
+- **Hierarchy**: Grid dominates, typography recedes
+- **Information Architecture**: Centered title, top-right battery indicator
+- **Typography**: Ultra-light system fonts (300 weight), uppercase geometric forms
+- **Breathing Space**: Generous whitespace for contemplative viewing
+- **User Intent**: Immediate emotional impact through data visualization
 
 ## Project Structure
 
 ```
 MementoMori/
-├── web-preview/          # Browser-based preview (develop here first)
-│   ├── index.html        # Main preview interface
-│   ├── memento.js        # Core rendering logic
-│   ├── config.json       # Configuration (birthdate, special days, quotes)
-│   ├── styles.css        # Styling
-│   └── test-special-days.html  # Test suite for special day detection
+├── web-preview/
+│   ├── index.html              # Horizontal layout (800×480)
+│   ├── vertical-designs.html   # Vertical layout (480×800) ⭐
+│   ├── memento.js             # Core rendering logic
+│   ├── config.json            # Personal configuration
+│   └── styles.css             # Preview styling
 │
-└── arduino/              # ESP32 firmware (TODO: coming soon)
-    ├── MementoMori.ino
-    ├── config.h
-    └── data/
-        └── config.json
+└── arduino/
+    └── MementoMori/           # Hardware implementation
 ```
 
-## Web Preview
+## Quick Start
 
 1. **Start local server:**
    ```bash
@@ -42,18 +51,14 @@ MementoMori/
    python3 -m http.server 8888
    ```
 
-2. **Open in browser:**
-   ```
-   http://localhost:8888/index.html
-   ```
+2. **View designs:**
+   - Horizontal: `http://localhost:8888/index.html`
+   - Vertical: `http://localhost:8888/vertical-designs.html` ⭐
 
-3. **Test special day detection:**
-   ```
-   http://localhost:8888/test-special-days.html
-   ```
-
-4. **Simulate dates:**
-   Use the date picker to test different dates, including your birthday and special days
+3. **Test features:**
+   - Use date picker to simulate different dates
+   - Click "Birthday" button to jump to your birthday
+   - Adjust battery slider to test indicator (1-5 dots)
 
 ## Configuration
 
@@ -64,34 +69,44 @@ Edit `web-preview/config.json`:
   "person": {
     "birthdate": "1987-08-17",
     "expectedLifespan": 80,
-    "timezone": "America/Los_Angeles"
+    "timezone": "America/New_York"
   },
   "specialDays": [
     {
       "date": "08-17",
       "title": "Your Birthday",
-      "quote": "It is not that we have a short time to live, but that we waste much of it.\n— Seneca"
+      "quote": "It is not that we have a short time to live, but that we waste much of it.\n—Seneca"
     }
   ]
 }
 ```
 
-**Note**: Special days use `MM-DD` format and recur every year.
+**Important Typography Note**: Attribution uses em dash attached to author name (`—Seneca`) for proper typographic hierarchy.
 
-## Features
+## Key Features
 
-- **Birthday-based week calculation**: Rows align with your age (week counter resets on your birthday)
-- **Pure minimalist design**: White background, black dots, no distractions
-- **Special day quotes**: Stoic philosophy quotes from Seneca, Marcus Aurelius, Epictetus
-- **Low power**: Deep sleep between updates, WiFi only for weekly NTP sync
-- **Easy configuration**: JSON-based, no code changes needed
+### Core Visualization
+- **Birthday-aligned weeks**: Grid rows align with your age (resets on your birthday)
+- **Pure minimalism**: White background, black filled dots, light gray outlines
+- **Optical balance**: Centered title, minimal battery indicator
 
-## Development Workflow
+### Battery Indicator
+- Displays as 1-5 dots in top-right corner
+- No decorative icons, just pure data
+- Maps percentage: 1-20% = 1 dot, 21-40% = 2 dots, etc.
 
-1. **Make changes in web preview** - instant visual feedback
-2. **Test thoroughly** - use date simulator and test suite
-3. **Port to Arduino** - once web version is verified
-4. **Deploy to hardware** - upload via Arduino IDE
+### Special Days
+- Replaces grid with centered philosophical quote
+- Stoic quotes from Seneca, Marcus Aurelius, Epictetus
+- Quote text word-wraps, attribution stays on single line
+- Timezone-aware detection (Eastern Time)
+
+### Vertical Layout (New)
+- **480×800 orientation** for vertical displays
+- Edge-to-edge grid for maximum visual impact
+- Centered "MEMENTO MORI" title (18px, weight 300)
+- Same dot-based battery indicator
+- Optimized for emotional impact
 
 ## Philosophy
 

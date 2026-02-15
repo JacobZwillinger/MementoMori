@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memento Mori - Vertical Orientation Designs</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+
+        .designs-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 40px;
+            margin-bottom: 40px;
+        }
+
+        .design-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .design-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .design-description {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+            line-height: 1.5;
+        }
+
+        .canvas-wrapper {
+            background: #e0e0e0;
+            padding: 20px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            border: 2px solid #333;
+            background: white;
+            display: block;
+        }
+
+        .controls {
+            margin-top: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: inline-block;
+            margin-right: 10px;
+            font-weight: 500;
+        }
+
+        input, button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .info {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Memento Mori - Vertical Orientation Designs (480×800)</h1>
+
+        <div class="controls">
+            <div class="control-group">
+                <label for="currentDate">Simulate Date:</label>
+                <input type="date" id="currentDate">
+                <button id="resetDate">Reset to Today</button>
+                <button id="birthdayDate">Birthday</button>
+            </div>
+            <div class="control-group">
+                <label for="batteryLevel">Battery Level:</label>
+                <input type="range" id="batteryLevel" min="0" max="100" value="75" style="width: 200px;">
+                <span id="batteryValue">75%</span>
+            </div>
+            <div class="info">
+                <div id="weeksInfo"></div>
+            </div>
+        </div>
+
+        <div class="designs-grid">
+            <!-- Design 2: Edge-to-Edge Impact -->
+            <div class="design-card">
+                <div class="design-title">Memento Mori - Vertical Design</div>
+                <div class="design-description">
+                    <strong>Philosophy:</strong> The data is the interface. Maximum visual presence.<br>
+                    <strong>Hierarchy:</strong> Grid dominates, information secondary<br>
+                    <strong>User Intent:</strong> Immediate emotional impact, visceral understanding
+                </div>
+                <div class="canvas-wrapper">
+                    <canvas id="design2" width="480" height="800"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        let config = {
+            person: {
+                birthdate: "1987-08-17",
+                expectedLifespan: 80
+            },
+            specialDays: []
+        };
+
+        // Display constants for vertical orientation
+        const DISPLAY_WIDTH = 480;
+        const DISPLAY_HEIGHT = 800;
+        const ROWS = 80;  // years (now vertical)
+        const COLS = 52;  // weeks per year (now horizontal)
+
+        // Current simulation date
+        let currentDate = new Date();
+        let batteryLevel = 75;
+
+        // Calculate weeks lived
+        function calculateWeeksLived(birthdate, referenceDate = new Date()) {
+            const birth = new Date(birthdate);
+            const now = new Date(referenceDate);
+
+            let age = now.getFullYear() - birth.getFullYear();
+            const thisYearBirthday = new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
+            if (now < thisYearBirthday) age--;
+
+            const lastBirthday = new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
+            if (now < thisYearBirthday) lastBirthday.setFullYear(lastBirthday.getFullYear() - 1);
+
+            const weeksSinceLastBirthday = Math.floor((now - lastBirthday) / (1000 * 60 * 60 * 24 * 7));
+            return (age * 52) + weeksSinceLastBirthday;
+        }
+
+        // Check if today is a special day (using Eastern Time)
+        function checkSpecialDay(date, specialDays) {
+            // Convert to Eastern Time (America/New_York) for special day detection
+            const options = { timeZone: 'America/New_York', month: '2-digit', day: '2-digit' };
+            const formatter = new Intl.DateTimeFormat('en-US', options);
+            const parts = formatter.formatToParts(date);
+
+            const month = parts.find(part => part.type === 'month').value;
+            const day = parts.find(part => part.type === 'day').value;
+            const today = `${month}-${day}`;
+
+            for (const specialDay of specialDays) {
+                if (specialDay.date === today) {
+                    return specialDay;
+                }
+            }
+            return null;
+        }
+
+        // Word wrap utility - does NOT split on newlines
+        function wrapText(ctx, text, maxWidth) {
+            const words = text.split(' ');
+            const lines = [];
+            let currentLine = '';
+
+            words.forEach(word => {
+                const testLine = currentLine + word + ' ';
+                const metrics = ctx.measureText(testLine);
+
+                if (metrics.width > maxWidth && currentLine !== '') {
+                    lines.push(currentLine.trim());
+                    currentLine = word + ' ';
+                } else {
+                    currentLine = testLine;
+                }
+            });
+
+            if (currentLine.trim() !== '') {
+                lines.push(currentLine.trim());
+            }
+
+            return lines;
+        }
+
+        // Render special day - minimal quote display
+        function renderSpecialDay(ctx, specialDay, weeksLived, totalWeeks) {
+            // Pure white background
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+            // Split quote and attribution
+            const parts = specialDay.quote.split('\n');
+            const quote = parts[0];
+            const attribution = parts[1] || '';
+
+            // Centered quote - nothing else
+            ctx.fillStyle = 'black';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Quote - large, serif, centered
+            ctx.font = '36px serif';
+            const quoteLines = wrapText(ctx, quote, DISPLAY_WIDTH - 80);
+            const lineHeight = 50;
+            const totalLines = quoteLines.length + (attribution ? 1 : 0);
+            const startY = (DISPLAY_HEIGHT / 2) - ((totalLines - 1) * lineHeight / 2);
+
+            // Render quote lines
+            quoteLines.forEach((line, index) => {
+                ctx.fillText(line, DISPLAY_WIDTH / 2, startY + (index * lineHeight));
+            });
+
+            // Render attribution on its own line (never wrapped)
+            if (attribution) {
+                ctx.fillText(attribution, DISPLAY_WIDTH / 2, startY + (quoteLines.length * lineHeight));
+            }
+
+            // Battery dots in top right (still visible on special days)
+            drawBatteryDots(ctx, DISPLAY_WIDTH - 12, 16, batteryLevel);
+        }
+
+        // Draw battery indicator - minimalist approach
+        function drawBattery(ctx, x, y, percentage) {
+            // Ultra-minimal: just the number
+            ctx.font = '14px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.fillStyle = '#000';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`${percentage}%`, x, y);
+        }
+
+        // Draw battery as dots
+        function drawBatteryDots(ctx, x, y, percentage) {
+            // Map percentage to dots: 1-20% = 1 dot, 21-40% = 2 dots, etc.
+            const numDots = Math.ceil(percentage / 20);
+            const dotRadius = 2;  // Smaller dots
+            const dotSpacing = 7; // Tighter spacing
+
+            ctx.fillStyle = '#000';
+
+            for (let i = 0; i < numDots; i++) {
+                ctx.beginPath();
+                ctx.arc(x - (i * dotSpacing), y, dotRadius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Design 1: Breathing Space
+        // Focus: Maximum whitespace, optical balance, the grid as primary element
+        function renderDesign1(weeksLived, totalWeeks) {
+            const canvas = document.getElementById('design1');
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+            // Generous margins create breathing space
+            const topMargin = 80;
+            const sideMargin = 24;
+
+            // Title - ultra light weight, not competing with the grid
+            ctx.fillStyle = '#000';
+            ctx.font = '300 18px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText('MEMENTO MORI', sideMargin, 24);
+
+            // Battery - pure number, no decoration
+            drawBattery(ctx, DISPLAY_WIDTH - sideMargin, 24, batteryLevel);
+
+            // Grid with generous padding
+            const gridY = topMargin;
+            const gridHeight = DISPLAY_HEIGHT - topMargin - 24;
+            const gridWidth = DISPLAY_WIDTH - (sideMargin * 2);
+
+            const cellHeight = gridHeight / ROWS;
+            const cellWidth = gridWidth / COLS;
+            const dotRadius = Math.min(cellWidth, cellHeight) / 3.5; // Smaller dots = more air
+
+            const offsetX = sideMargin;
+
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const weekIndex = row * COLS + col;
+                    const x = offsetX + (col * cellWidth) + cellWidth / 2;
+                    const y = gridY + (row * cellHeight) + cellHeight / 2;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+
+                    if (weekIndex < weeksLived) {
+                        ctx.fillStyle = '#000000';
+                        ctx.fill();
+                    } else if (weekIndex < totalWeeks) {
+                        ctx.strokeStyle = '#e8e8e8'; // Lighter gray - less visual noise
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        // Design 2: Edge-to-Edge Impact
+        // Focus: Grid dominates, information recedes to corners, maximum presence
+        function renderDesign2(weeksLived, totalWeeks) {
+            const canvas = document.getElementById('design2');
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+            // Grid bleeds to edges - prioritizes the data
+            const topMargin = 36;
+            const bottomMargin = 12;
+
+            const gridY = topMargin;
+            const gridHeight = DISPLAY_HEIGHT - topMargin - bottomMargin;
+            const cellHeight = gridHeight / ROWS;
+            const cellWidth = DISPLAY_WIDTH / COLS;
+            const dotRadius = Math.min(cellWidth, cellHeight) / 3.2;
+
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const weekIndex = row * COLS + col;
+                    const x = (col * cellWidth) + cellWidth / 2;
+                    const y = gridY + (row * cellHeight) + cellHeight / 2;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+
+                    if (weekIndex < weeksLived) {
+                        ctx.fillStyle = '#000000';
+                        ctx.fill();
+                    } else if (weekIndex < totalWeeks) {
+                        ctx.strokeStyle = '#ececec';
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Centered title at top - larger font
+            ctx.fillStyle = '#000';
+            ctx.font = '300 18px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText('MEMENTO MORI', DISPLAY_WIDTH / 2, 12);
+
+            // Battery dots in top right - smaller
+            drawBatteryDots(ctx, DISPLAY_WIDTH - 12, 16, batteryLevel);
+        }
+
+        // Design 3: Asymmetric Balance
+        // Focus: Dynamic composition, title as structural element, visual tension
+        function renderDesign3(weeksLived, totalWeeks) {
+            const canvas = document.getElementById('design3');
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+            // Title creates a vertical division - strong structural line
+            const leftMargin = 32;
+            const rightMargin = 16;
+            const topMargin = 60;
+            const bottomMargin = 60;
+
+            // Vertical title - acts as a visual anchor
+            ctx.save();
+            ctx.translate(12, DISPLAY_HEIGHT / 2);
+            ctx.rotate(-Math.PI / 2);
+            ctx.fillStyle = '#000';
+            ctx.font = '400 16px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('MEMENTO MORI', 0, 0);
+            ctx.restore();
+
+            // Battery at top-right - balances composition
+            drawBattery(ctx, DISPLAY_WIDTH - rightMargin, 20, batteryLevel);
+
+            // Grid asymmetrically positioned
+            const gridX = leftMargin;
+            const gridWidth = DISPLAY_WIDTH - leftMargin - rightMargin;
+            const gridY = topMargin;
+            const gridHeight = DISPLAY_HEIGHT - topMargin - bottomMargin;
+
+            const cellHeight = gridHeight / ROWS;
+            const cellWidth = gridWidth / COLS;
+            const dotRadius = Math.min(cellWidth, cellHeight) / 3.5;
+
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const weekIndex = row * COLS + col;
+                    const x = gridX + (col * cellWidth) + cellWidth / 2;
+                    const y = gridY + (row * cellHeight) + cellHeight / 2;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+
+                    if (weekIndex < weeksLived) {
+                        ctx.fillStyle = '#000000';
+                        ctx.fill();
+                    } else if (weekIndex < totalWeeks) {
+                        ctx.strokeStyle = '#e8e8e8';
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        // Design 4: Pure Data
+        // Focus: Grid is everything, typography becomes data point, radical simplicity
+        function renderDesign4(weeksLived, totalWeeks) {
+            const canvas = document.getElementById('design4');
+            const ctx = canvas.getContext('2d');
+
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+
+            // Absolute full-bleed - no margins
+            const cellHeight = DISPLAY_HEIGHT / ROWS;
+            const cellWidth = DISPLAY_WIDTH / COLS;
+            const dotRadius = Math.min(cellWidth, cellHeight) / 3.2;
+
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    const weekIndex = row * COLS + col;
+                    const x = (col * cellWidth) + cellWidth / 2;
+                    const y = (row * cellHeight) + cellHeight / 2;
+
+                    ctx.beginPath();
+                    ctx.arc(x, y, dotRadius, 0, Math.PI * 2);
+
+                    if (weekIndex < weeksLived) {
+                        ctx.fillStyle = '#000000';
+                        ctx.fill();
+                    } else if (weekIndex < totalWeeks) {
+                        ctx.strokeStyle = '#ececec';
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+
+            // Title and battery rendered directly on grid - no background
+            // Creates intentional overlap - information layering
+            ctx.fillStyle = '#000';
+            ctx.font = '300 12px -apple-system, BlinkMacSystemFont, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+
+            // Title small and unobtrusive
+            ctx.fillText('MEMENTO MORI', 8, 8);
+
+            // Battery as pure number
+            ctx.textAlign = 'right';
+            ctx.fillText(`${batteryLevel}%`, DISPLAY_WIDTH - 8, 8);
+        }
+
+        // Render all designs
+        function renderAll() {
+            const weeksLived = calculateWeeksLived(config.person.birthdate, currentDate);
+            const totalWeeks = config.person.expectedLifespan * 52;
+
+            // Check for special day
+            const specialDay = checkSpecialDay(currentDate, config.specialDays);
+
+            const canvas = document.getElementById('design2');
+            const ctx = canvas.getContext('2d');
+
+            // Render special day or normal grid
+            if (specialDay) {
+                renderSpecialDay(ctx, specialDay, weeksLived, totalWeeks);
+            } else {
+                renderDesign2(weeksLived, totalWeeks);
+            }
+
+            // Update info
+            const birthDate = new Date(config.person.birthdate);
+            const age = currentDate.getFullYear() - birthDate.getFullYear() -
+                        (currentDate < new Date(currentDate.getFullYear(), birthDate.getMonth(), birthDate.getDate()) ? 1 : 0);
+
+            let infoHTML = `
+                <strong>Weeks Lived:</strong> ${weeksLived} of ${totalWeeks} (${((weeksLived / totalWeeks) * 100).toFixed(1)}%)<br>
+                <strong>Current Age:</strong> ${age} years<br>
+                <strong>Simulated Date:</strong> ${currentDate.toLocaleDateString()}
+            `;
+
+            if (specialDay) {
+                infoHTML += `<br><strong>Special Day:</strong> ${specialDay.title}`;
+            }
+
+            document.getElementById('weeksInfo').innerHTML = infoHTML;
+        }
+
+        // Load configuration
+        async function loadConfig() {
+            try {
+                const response = await fetch('config.json');
+                const loadedConfig = await response.json();
+                config = { ...config, ...loadedConfig };
+                renderAll();
+            } catch (error) {
+                console.log('Config file not found, using defaults');
+                renderAll();
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            const dateInput = document.getElementById('currentDate');
+            // Set initial date value properly
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentDate.getDate()).padStart(2, '0');
+            dateInput.value = `${year}-${month}-${day}`;
+
+            const batteryInput = document.getElementById('batteryLevel');
+            const batteryValue = document.getElementById('batteryValue');
+
+            dateInput.addEventListener('change', (e) => {
+                // Add time component to avoid timezone shifting the date
+                currentDate = new Date(e.target.value + 'T12:00:00');
+                renderAll();
+            });
+
+            batteryInput.addEventListener('input', (e) => {
+                batteryLevel = parseInt(e.target.value);
+                batteryValue.textContent = batteryLevel + '%';
+                renderAll();
+            });
+
+            document.getElementById('resetDate').addEventListener('click', () => {
+                currentDate = new Date();
+                const year = currentDate.getFullYear();
+                const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+                const day = String(currentDate.getDate()).padStart(2, '0');
+                dateInput.value = `${year}-${month}-${day}`;
+                renderAll();
+            });
+
+            document.getElementById('birthdayDate').addEventListener('click', () => {
+                // Set the date input value directly as a string
+                dateInput.value = '2026-08-17';
+                // Create date at noon to match the input display
+                currentDate = new Date('2026-08-17T12:00:00');
+                renderAll();
+            });
+
+            // Load config and render
+            loadConfig();
+        });
+    </script>
+</body>
+</html>
