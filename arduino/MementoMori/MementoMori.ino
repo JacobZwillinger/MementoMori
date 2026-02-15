@@ -9,7 +9,6 @@
 #include <time.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
-#include <ArduinoOTA.h>
 #include <driver/rtc_io.h>
 
 // Display configuration for reTerminal E1001
@@ -31,6 +30,7 @@ struct Config {
   String wifiSSID;
   String wifiPassword;
   String ntpServer;
+  String posixTZ;  // POSIX timezone string (e.g., "EST5EDT,M3.2.0,M11.1.0")
 
   struct SpecialDay {
     String date;   // Format: "MM-DD"
@@ -45,9 +45,6 @@ struct Config {
 // Time tracking
 struct tm timeinfo;
 bool timeInitialized = false;
-
-// OTA mode flag
-bool otaMode = false;
 
 void setup() {
   Serial.begin(115200);
@@ -66,26 +63,11 @@ void setup() {
 
   delay(50);  // Let GPIO settle after wake from deep sleep
 
-  // Check wake cause to determine if woken by button or timer
+  // Check wake cause
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
   if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
     Serial.println("Woke from button press (EXT0)");
-
-    // Check if button STILL held (for OTA mode)
-    delay(100);  // Debounce
-    if (digitalRead(3) == LOW) {
-      Serial.println("Button still held, checking for OTA mode...");
-      delay(1500);  // Wait 1.5 seconds to ensure intentional hold
-      if (digitalRead(3) == LOW) {
-        otaMode = true;
-        Serial.println("OTA Mode activated via button hold");
-      } else {
-        Serial.println("Quick press detected, normal mode");
-      }
-    } else {
-      Serial.println("Button released, normal wake");
-    }
   } else if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
     Serial.println("Woke from timer (midnight update)");
   } else {
@@ -103,7 +85,7 @@ void setup() {
 
   // Initialize display
   display.init(115200);
-  display.setRotation(0);  // Horizontal orientation
+  display.setRotation(0);  // Vertical orientation (480×800)
   display.setTextColor(GxEPD_BLACK);
 
   // Connect to WiFi and sync time
@@ -126,7 +108,13 @@ void loop() {
 void loadConfig() {
   Serial.println("Loading configuration...");
 
-  File file = SPIFFS.open("/config.json", "r");
+  // Try local config first (contains real WiFi creds, not checked into git)
+  File file = SPIFFS.open("/config.local.json", "r");
+  if (file) {
+    Serial.println("Using config.local.json");
+  } else {
+    file = SPIFFS.open("/config.json", "r");
+  }
   if (!file) {
     Serial.println("Failed to open config file, using defaults");
     setDefaultConfig();
@@ -154,6 +142,9 @@ void loadConfig() {
   config.wifiPassword = doc["wifi"]["password"].as<String>();
   config.ntpServer = doc["wifi"]["ntpServer"] | "pool.ntp.org";
 
+  // Parse POSIX timezone string (required for ESP32 setenv TZ)
+  config.posixTZ = doc["person"]["posixTZ"] | "EST5EDT,M3.2.0,M11.1.0";
+
   // Parse special days
   JsonArray specialDays = doc["specialDays"];
   config.specialDayCount = min((int)specialDays.size(), 10);
@@ -175,35 +166,11 @@ void setDefaultConfig() {
   config.birthdate = "1987-08-17";
   config.expectedLifespan = 80;
   config.timezone = "America/New_York";
-  config.wifiSSID = "YOUR_SSID";
-  config.wifiPassword = "YOUR_PASSWORD";
+  config.posixTZ = "EST5EDT,M3.2.0,M11.1.0";
+  config.wifiSSID = "";
+  config.wifiPassword = "";
   config.ntpServer = "pool.ntp.org";
   config.specialDayCount = 0;
-}
-
-void setupOTA() {
-  ArduinoOTA.setHostname("memento-mori");
-  ArduinoOTA.setPassword("memento2024");
-
-  ArduinoOTA.onStart([]() {
-    String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
-    Serial.println("OTA Update: " + type);
-  });
-
-  ArduinoOTA.onEnd([]() {
-    Serial.println("\nOTA Complete");
-  });
-
-  ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
-    Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-  });
-
-  ArduinoOTA.onError([](ota_error_t error) {
-    Serial.printf("Error[%u]: ", error);
-  });
-
-  ArduinoOTA.begin();
-  Serial.println("OTA Ready");
 }
 
 void syncTime() {
@@ -232,23 +199,10 @@ void syncTime() {
 
   Serial.println("\nWiFi connected");
 
-  // Setup OTA
-  setupOTA();
-
-  // If OTA mode, wait for updates (60 seconds)
-  if (otaMode) {
-    Serial.println("Waiting for OTA updates (60 seconds)...");
-    unsigned long startTime = millis();
-    while (millis() - startTime < 60000) {
-      ArduinoOTA.handle();
-      delay(10);
-    }
-    Serial.println("OTA window closed");
-  }
-
   // Configure timezone and NTP
-  configTime(0, 0, config.ntpServer.c_str());  // UTC time
-  setenv("TZ", config.timezone.c_str(), 1);
+  // Use POSIX TZ string (e.g., "EST5EDT,M3.2.0,M11.1.0"), not Olson names
+  configTime(0, 0, config.ntpServer.c_str());
+  setenv("TZ", config.posixTZ.c_str(), 1);
   tzset();
 
   // Wait for time sync
@@ -287,19 +241,28 @@ int calculateWeeksLived(const String& birthdate, struct tm* now) {
     age--;  // Birthday hasn't happened yet
   }
 
-  // Calculate last birthday
-  struct tm lastBirthday = *now;
-  lastBirthday.tm_year = now->tm_year + 1900 - 1900;  // Current year
+  // Calculate last birthday (normalize to noon to avoid time-of-day errors)
+  struct tm lastBirthday = {0};
+  lastBirthday.tm_year = now->tm_year;  // Current year (years since 1900)
   lastBirthday.tm_mon = birthMonth - 1;
   lastBirthday.tm_mday = birthDay;
+  lastBirthday.tm_hour = 12;
+  lastBirthday.tm_isdst = -1;
 
   if (now->tm_mon + 1 < birthMonth ||
       (now->tm_mon + 1 == birthMonth && now->tm_mday < birthDay)) {
     lastBirthday.tm_year--;  // Use last year's birthday
   }
 
+  // Normalize 'now' to noon as well for consistent day counting
+  struct tm nowNoon = *now;
+  nowNoon.tm_hour = 12;
+  nowNoon.tm_min = 0;
+  nowNoon.tm_sec = 0;
+  nowNoon.tm_isdst = -1;
+
   // Calculate weeks since last birthday
-  time_t nowTime = mktime(now);
+  time_t nowTime = mktime(&nowNoon);
   time_t lastBirthdayTime = mktime(&lastBirthday);
   int daysSinceLastBirthday = (nowTime - lastBirthdayTime) / (60 * 60 * 24);
   int weeksSinceLastBirthday = daysSinceLastBirthday / 7;
@@ -360,11 +323,11 @@ void renderDisplay() {
   }
 }
 
-// Draw battery indicator as dots (1-5 dots based on percentage)
+// Draw battery indicator as dots (0-5 dots based on percentage)
 void drawBatteryDots(int batteryPercent) {
   int numDots = (batteryPercent + 19) / 20;  // 1-20% = 1 dot, 21-40% = 2 dots, etc.
   if (numDots > 5) numDots = 5;
-  if (numDots < 1) numDots = 1;
+  if (numDots < 0) numDots = 0;
 
   int dotRadius = 2;
   int dotSpacing = 7;
@@ -449,26 +412,64 @@ void renderSpecialDay(Config::SpecialDay& specialDay, int batteryPercent) {
       attribution.trim();  // Remove any extra whitespace
     }
 
-    // Large serif font for quote
+    // Large serif font for quote with word wrap
     display.setFont(&FreeSerif24pt7b);
     display.setTextColor(GxEPD_BLACK);
 
-    // Simple centered rendering (word wrap would require more complex logic)
-    // For now, center the quote and attribution separately
     int16_t x1, y1;
     uint16_t w, h;
+    const int maxWidth = DISPLAY_WIDTH - 60;  // 30px margins each side
+    const int lineHeight = 48;
 
-    // Draw quote centered
-    display.getTextBounds(quote, 0, 0, &x1, &y1, &w, &h);
-    int quoteY = (DISPLAY_HEIGHT / 2) - h;
-    display.setCursor((DISPLAY_WIDTH - w) / 2, quoteY);
-    display.print(quote);
+    // Word-wrap the quote into lines
+    String lines[10];
+    int lineCount = 0;
+    String remaining = quote;
 
-    // Draw attribution below quote (never wrapped)
+    while (remaining.length() > 0 && lineCount < 10) {
+      // Try the full remaining text first
+      display.getTextBounds(remaining, 0, 0, &x1, &y1, &w, &h);
+      if ((int)w <= maxWidth) {
+        lines[lineCount++] = remaining;
+        break;
+      }
+
+      // Find the last space that fits within maxWidth
+      int lastSpace = -1;
+      for (int i = 1; i <= (int)remaining.length(); i++) {
+        String sub = remaining.substring(0, i);
+        display.getTextBounds(sub, 0, 0, &x1, &y1, &w, &h);
+        if ((int)w > maxWidth) break;
+        if (remaining.charAt(i - 1) == ' ') lastSpace = i - 1;
+      }
+
+      if (lastSpace <= 0) {
+        // No space found that fits — force break at width
+        lines[lineCount++] = remaining;
+        break;
+      }
+
+      lines[lineCount++] = remaining.substring(0, lastSpace);
+      remaining = remaining.substring(lastSpace + 1);
+    }
+
+    // Calculate total height for vertical centering
+    int totalLines = lineCount + (attribution.length() > 0 ? 1 : 0);
+    int totalHeight = totalLines * lineHeight;
+    int startY = (DISPLAY_HEIGHT - totalHeight) / 2 + lineHeight;  // +lineHeight for baseline
+
+    // Draw wrapped quote lines centered
+    for (int i = 0; i < lineCount; i++) {
+      display.getTextBounds(lines[i], 0, 0, &x1, &y1, &w, &h);
+      display.setCursor((DISPLAY_WIDTH - w) / 2, startY + (i * lineHeight));
+      display.print(lines[i]);
+    }
+
+    // Draw attribution below quote (never wrapped, smaller font)
     if (attribution.length() > 0) {
+      display.setFont(&FreeSerif18pt7b);
       display.getTextBounds(attribution, 0, 0, &x1, &y1, &w, &h);
-      int attrY = quoteY + h + 20;  // 20px spacing
-      display.setCursor((DISPLAY_WIDTH - w) / 2, attrY);
+      display.setCursor((DISPLAY_WIDTH - w) / 2, startY + (lineCount * lineHeight));
       display.print(attribution);
     }
 
@@ -488,7 +489,12 @@ void renderError(const char* message) {
     display.fillScreen(GxEPD_WHITE);
     display.setFont(&FreeSerif18pt7b);
     display.setTextColor(GxEPD_BLACK);
-    drawCenteredText(String(message), DISPLAY_HEIGHT / 2);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds(message, 0, 0, &x1, &y1, &w, &h);
+    display.setCursor((DISPLAY_WIDTH - w) / 2, DISPLAY_HEIGHT / 2);
+    display.print(message);
   } while (display.nextPage());
 
   Serial.print("Error: ");

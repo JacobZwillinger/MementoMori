@@ -228,7 +228,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Event listeners
     dateInput.addEventListener('change', (e) => {
-        currentDate = new Date(e.target.value);
+        // Add time component to avoid UTC midnight shifting to previous day in local time
+        currentDate = new Date(e.target.value + 'T12:00:00');
         render();
     });
 

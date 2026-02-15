@@ -17,3 +17,7 @@ __pycache__/
 # Local test files
 web-preview/debug-test.html
 web-preview/verify-test.js
+
+# Local config with real credentials (never commit)
+arduino/data/config.local.json
+web-preview/config.local.json
