@@ -145,8 +145,8 @@ void setDefaultConfig() {
   config.birthdate = "1987-08-17";
   config.expectedLifespan = 80;
   config.timezone = "America/New_York";
-  config.wifiSSID = "";  // Will fail to connect, but won't crash
-  config.wifiPassword = "";
+  config.wifiSSID = "YOUR_SSID";
+  config.wifiPassword = "YOUR_PASSWORD";
   config.ntpServer = "pool.ntp.org";
   config.specialDayCount = 0;
 }
@@ -291,9 +291,15 @@ int checkSpecialDay(struct tm* now) {
 }
 
 void renderDisplay() {
+  // If time not initialized, use hardcoded date for testing (Feb 14, 2026)
   if (!timeInitialized) {
-    renderError("Time not synchronized");
-    return;
+    Serial.println("Using hardcoded date for testing: Feb 14, 2026");
+    timeinfo.tm_year = 2026 - 1900;  // Years since 1900
+    timeinfo.tm_mon = 1;             // February (0-indexed)
+    timeinfo.tm_mday = 14;           // 14th
+    timeinfo.tm_hour = 12;
+    timeinfo.tm_min = 0;
+    timeinfo.tm_sec = 0;
   }
 
   int weeksLived = calculateWeeksLived(config.birthdate, &timeinfo);
@@ -324,22 +330,22 @@ void renderGrid(int weeksLived, int totalWeeks) {
     // Calculate cell dimensions
     float cellWidth = (float)DISPLAY_WIDTH / COLS;
     float cellHeight = (float)DISPLAY_HEIGHT / ROWS;
-    float dotRadius = min(cellWidth, cellHeight) / 3.0;
+    float dotSize = min(cellWidth, cellHeight) * 0.7;  // 70% of cell size
 
-    // Draw circular dots
+    // Draw square dots
     for (int row = 0; row < ROWS; row++) {
       for (int col = 0; col < COLS; col++) {
         int weekIndex = row * COLS + col;
 
-        int x = col * cellWidth + cellWidth / 2;
-        int y = row * cellHeight + cellHeight / 2;
+        int x = col * cellWidth + (cellWidth - dotSize) / 2;
+        int y = row * cellHeight + (cellHeight - dotSize) / 2;
 
         if (weekIndex < weeksLived) {
-          // Past: solid black circle
-          display.fillCircle(x, y, dotRadius, GxEPD_BLACK);
+          // Past: solid black square
+          display.fillRect(x, y, dotSize, dotSize, GxEPD_BLACK);
         } else if (weekIndex < totalWeeks) {
-          // Future: outline circle
-          display.drawCircle(x, y, dotRadius, GxEPD_BLACK);
+          // Future: outline square
+          display.drawRect(x, y, dotSize, dotSize, GxEPD_BLACK);
         }
       }
     }
