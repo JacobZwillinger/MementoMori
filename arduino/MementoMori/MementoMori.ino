@@ -57,9 +57,16 @@ void setup() {
   pinMode(5, INPUT_PULLUP);  // Left white
 
   // Check if green button pressed during boot (for OTA mode)
+  // If button is held for 1 second after wake, enter OTA mode
   if (digitalRead(3) == LOW) {
-    otaMode = true;
-    Serial.println("OTA Mode activated via button press");
+    Serial.println("Green button detected, checking for OTA mode...");
+    delay(1000);  // Wait 1 second
+    if (digitalRead(3) == LOW) {
+      otaMode = true;
+      Serial.println("OTA Mode activated via button hold");
+    } else {
+      Serial.println("Quick press detected, normal mode");
+    }
   }
 
   // Initialize SPIFFS (make non-blocking)
