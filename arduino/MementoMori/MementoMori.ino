@@ -51,22 +51,37 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n\nMemento Mori - Initializing...");
 
-  // Configure button pins (GPIO3, GPIO4, GPIO5 = green, right white, left white)
-  pinMode(3, INPUT_PULLUP);  // Green button
+  // Configure button pins - GPIO3 used for ext0 wakeup, don't reconfigure it
+  // pinMode(3, INPUT_PULLUP);  // REMOVED - ext0 wakeup handles GPIO3 configuration
   pinMode(4, INPUT_PULLUP);  // Right white
   pinMode(5, INPUT_PULLUP);  // Left white
 
-  // Check if green button pressed during boot (for OTA mode)
-  // If button is held for 1 second after wake, enter OTA mode
-  if (digitalRead(3) == LOW) {
-    Serial.println("Green button detected, checking for OTA mode...");
-    delay(1000);  // Wait 1 second
+  delay(50);  // Let GPIO settle after wake from deep sleep
+
+  // Check wake cause to determine if woken by button or timer
+  esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
+
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
+    Serial.println("Woke from button press (EXT0)");
+
+    // Check if button STILL held (for OTA mode)
+    delay(100);  // Debounce
     if (digitalRead(3) == LOW) {
-      otaMode = true;
-      Serial.println("OTA Mode activated via button hold");
+      Serial.println("Button still held, checking for OTA mode...");
+      delay(1500);  // Wait 1.5 seconds to ensure intentional hold
+      if (digitalRead(3) == LOW) {
+        otaMode = true;
+        Serial.println("OTA Mode activated via button hold");
+      } else {
+        Serial.println("Quick press detected, normal mode");
+      }
     } else {
-      Serial.println("Quick press detected, normal mode");
+      Serial.println("Button released, normal wake");
     }
+  } else if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
+    Serial.println("Woke from timer (midnight update)");
+  } else {
+    Serial.println("First boot or reset");
   }
 
   // Initialize SPIFFS (make non-blocking)
