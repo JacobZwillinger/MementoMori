@@ -1,5 +1,6 @@
 // Memento Mori - Life in Weeks
-// For reTerminal E1001 (800x480 e-paper, ESP32-S3)
+// For reTerminal E1001 (480×800 e-paper, Vertical Orientation)
+// Minimalist design: centered title, dot-based battery indicator, edge-to-edge grid
 
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeSerif18pt7b.h>
@@ -16,11 +17,11 @@
 // Pin mapping from Seeed documentation: CS=10, DC=11, RST=12, BUSY=13
 GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT> display(GxEPD2_750_T7(/*CS=*/ 10, /*DC=*/ 11, /*RST=*/ 12, /*BUSY=*/ 13));
 
-// Display constants
-const int COLS = 52;  // weeks per year
-const int ROWS = 80;  // years of life
-const int DISPLAY_WIDTH = 800;
-const int DISPLAY_HEIGHT = 480;
+// Display constants - VERTICAL ORIENTATION (480×800)
+const int COLS = 52;  // weeks per year (horizontal)
+const int ROWS = 80;  // years of life (vertical)
+const int DISPLAY_WIDTH = 480;
+const int DISPLAY_HEIGHT = 800;
 
 // Configuration structure
 struct Config {
@@ -319,6 +320,12 @@ int checkSpecialDay(struct tm* now) {
   return -1;  // No special day
 }
 
+int getBatteryPercent() {
+  // TODO: Implement actual battery reading for reTerminal E1001
+  // For now, return 75% as placeholder
+  return 75;
+}
+
 void renderDisplay() {
   // If time not initialized, use hardcoded date for testing (Feb 14, 2026)
   if (!timeInitialized) {
@@ -334,92 +341,143 @@ void renderDisplay() {
   int weeksLived = calculateWeeksLived(config.birthdate, &timeinfo);
   int totalWeeks = config.expectedLifespan * 52;
   int specialDayIndex = checkSpecialDay(&timeinfo);
+  int batteryPercent = getBatteryPercent();
 
   Serial.print("Weeks lived: ");
   Serial.print(weeksLived);
   Serial.print(" of ");
-  Serial.println(totalWeeks);
+  Serial.print(totalWeeks);
+  Serial.print(" | Battery: ");
+  Serial.print(batteryPercent);
+  Serial.println("%");
 
   if (specialDayIndex >= 0) {
     Serial.print("Special day: ");
     Serial.println(config.specialDays[specialDayIndex].title);
-    renderSpecialDay(config.specialDays[specialDayIndex]);
+    renderSpecialDay(config.specialDays[specialDayIndex], batteryPercent);
   } else {
-    renderGrid(weeksLived, totalWeeks);
+    renderGrid(weeksLived, totalWeeks, batteryPercent);
   }
 }
 
-void renderGrid(int weeksLived, int totalWeeks) {
+// Draw battery indicator as dots (1-5 dots based on percentage)
+void drawBatteryDots(int batteryPercent) {
+  int numDots = (batteryPercent + 19) / 20;  // 1-20% = 1 dot, 21-40% = 2 dots, etc.
+  if (numDots > 5) numDots = 5;
+  if (numDots < 1) numDots = 1;
+
+  int dotRadius = 2;
+  int dotSpacing = 7;
+  int x = DISPLAY_WIDTH - 12;
+  int y = 16;
+
+  for (int i = 0; i < numDots; i++) {
+    display.fillCircle(x - (i * dotSpacing), y, dotRadius, GxEPD_BLACK);
+  }
+}
+
+void renderGrid(int weeksLived, int totalWeeks, int batteryPercent) {
   display.setFullWindow();
   display.firstPage();
 
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    // Calculate cell dimensions
-    float cellWidth = (float)DISPLAY_WIDTH / COLS;
-    float cellHeight = (float)DISPLAY_HEIGHT / ROWS;
-    float dotSize = min(cellWidth, cellHeight) * 0.7;  // 70% of cell size
+    // Grid bleeds to edges - vertical design
+    const int topMargin = 36;
+    const int bottomMargin = 12;
 
-    // Draw square dots
+    const int gridY = topMargin;
+    const int gridHeight = DISPLAY_HEIGHT - topMargin - bottomMargin;
+    const float cellHeight = (float)gridHeight / ROWS;
+    const float cellWidth = (float)DISPLAY_WIDTH / COLS;
+    const float dotRadius = min(cellWidth, cellHeight) / 3.2;
+
+    // Draw circular dots
     for (int row = 0; row < ROWS; row++) {
       for (int col = 0; col < COLS; col++) {
         int weekIndex = row * COLS + col;
 
-        int x = col * cellWidth + (cellWidth - dotSize) / 2;
-        int y = row * cellHeight + (cellHeight - dotSize) / 2;
+        int x = (col * cellWidth) + cellWidth / 2;
+        int y = gridY + (row * cellHeight) + cellHeight / 2;
 
         if (weekIndex < weeksLived) {
-          // Past: solid black square
-          display.fillRect(x, y, dotSize, dotSize, GxEPD_BLACK);
+          // Past: filled black circle
+          display.fillCircle(x, y, dotRadius, GxEPD_BLACK);
         } else if (weekIndex < totalWeeks) {
-          // Future: outline square
-          display.drawRect(x, y, dotSize, dotSize, GxEPD_BLACK);
+          // Future: outline circle (very light)
+          display.drawCircle(x, y, dotRadius, GxEPD_BLACK);
         }
       }
     }
 
+    // Centered title at top
+    display.setFont(NULL);  // Use default font for clean minimal text
+    display.setTextColor(GxEPD_BLACK);
+    display.setTextSize(2);
+
+    int16_t x1, y1;
+    uint16_t w, h;
+    display.getTextBounds("MEMENTO MORI", 0, 0, &x1, &y1, &w, &h);
+    display.setCursor((DISPLAY_WIDTH - w) / 2, 12);
+    display.print("MEMENTO MORI");
+
+    // Battery dots in top right
+    drawBatteryDots(batteryPercent);
+
   } while (display.nextPage());
 
-  Serial.println("Grid rendered");
+  Serial.println("Vertical grid rendered");
 }
 
-void renderSpecialDay(Config::SpecialDay& specialDay) {
+void renderSpecialDay(Config::SpecialDay& specialDay, int batteryPercent) {
   display.setFullWindow();
   display.firstPage();
 
   do {
     display.fillScreen(GxEPD_WHITE);
 
-    // Center the quote
+    // Split quote and attribution at newline
+    String fullQuote = specialDay.quote;
+    int newlineIndex = fullQuote.indexOf('\n');
+    String quote = fullQuote;
+    String attribution = "";
+
+    if (newlineIndex >= 0) {
+      quote = fullQuote.substring(0, newlineIndex);
+      attribution = fullQuote.substring(newlineIndex + 1);
+      attribution.trim();  // Remove any extra whitespace
+    }
+
+    // Large serif font for quote
     display.setFont(&FreeSerif24pt7b);
     display.setTextColor(GxEPD_BLACK);
 
-    // Word wrap and center the quote
-    int16_t x = DISPLAY_WIDTH / 2;
-    int16_t y = DISPLAY_HEIGHT / 2;
+    // Simple centered rendering (word wrap would require more complex logic)
+    // For now, center the quote and attribution separately
+    int16_t x1, y1;
+    uint16_t w, h;
 
-    // Simple word wrap (basic implementation)
-    String quote = specialDay.quote;
-    int maxWidth = DISPLAY_WIDTH - 120;
+    // Draw quote centered
+    display.getTextBounds(quote, 0, 0, &x1, &y1, &w, &h);
+    int quoteY = (DISPLAY_HEIGHT / 2) - h;
+    display.setCursor((DISPLAY_WIDTH - w) / 2, quoteY);
+    display.print(quote);
 
-    // Draw centered text
-    drawCenteredText(quote, y);
+    // Draw attribution below quote (never wrapped)
+    if (attribution.length() > 0) {
+      display.getTextBounds(attribution, 0, 0, &x1, &y1, &w, &h);
+      int attrY = quoteY + h + 20;  // 20px spacing
+      display.setCursor((DISPLAY_WIDTH - w) / 2, attrY);
+      display.print(attribution);
+    }
+
+    // Battery dots still visible on special days
+    drawBatteryDots(batteryPercent);
 
   } while (display.nextPage());
 
   Serial.println("Special day rendered");
-}
-
-void drawCenteredText(String text, int y) {
-  // Simple implementation - draw text centered
-  // For production, implement proper word wrapping
-  int16_t x1, y1;
-  uint16_t w, h;
-
-  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
-  display.setCursor((DISPLAY_WIDTH - w) / 2, y);
-  display.print(text);
 }
 
 void renderError(const char* message) {
