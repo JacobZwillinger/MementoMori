@@ -9,6 +9,7 @@
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
 #include <ArduinoOTA.h>
+#include <driver/rtc_io.h>
 
 // Display configuration for reTerminal E1001
 // 7.5" 800x480 monochrome e-paper
@@ -51,8 +52,14 @@ void setup() {
   Serial.begin(115200);
   Serial.println("\n\nMemento Mori - Initializing...");
 
-  // Configure button pins - GPIO3 used for ext0 wakeup, don't reconfigure it
-  // pinMode(3, INPUT_PULLUP);  // REMOVED - ext0 wakeup handles GPIO3 configuration
+  // Configure GPIO3 for ext0 wakeup using RTC GPIO functions
+  // This ensures proper pull resistor configuration for wake-from-sleep
+  rtc_gpio_init(GPIO_NUM_3);
+  rtc_gpio_set_direction(GPIO_NUM_3, RTC_GPIO_MODE_INPUT_ONLY);
+  rtc_gpio_pulldown_dis(GPIO_NUM_3);   // Disable pull-down
+  rtc_gpio_pullup_en(GPIO_NUM_3);      // Enable pull-up (button pulls to ground)
+  rtc_gpio_hold_dis(GPIO_NUM_3);       // Release from hold if held
+
   pinMode(4, INPUT_PULLUP);  // Right white
   pinMode(5, INPUT_PULLUP);  // Left white
 
