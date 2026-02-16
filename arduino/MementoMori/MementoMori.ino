@@ -10,17 +10,18 @@
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
 #include <driver/rtc_io.h>
+#include "wifi_credentials.h"
 
 // Display configuration for reTerminal E1001
 // 7.5" 800x480 monochrome e-paper
 // Pin mapping from Seeed documentation: CS=10, DC=11, RST=12, BUSY=13
 GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT> display(GxEPD2_750_T7(/*CS=*/ 10, /*DC=*/ 11, /*RST=*/ 12, /*BUSY=*/ 13));
 
-// Display constants - HORIZONTAL ORIENTATION (800×480)
+// Display constants - PORTRAIT MODE (rotation=1 makes 800×480 become 480×800)
 const int COLS = 52;  // weeks per year (horizontal)
 const int ROWS = 80;  // years of life (vertical)
-const int DISPLAY_WIDTH = 800;
-const int DISPLAY_HEIGHT = 480;
+const int DISPLAY_WIDTH = 480;
+const int DISPLAY_HEIGHT = 800;
 
 // Configuration structure
 struct Config {
@@ -75,18 +76,23 @@ void setup() {
   }
 
   // Initialize SPIFFS (make non-blocking)
+  Serial.println("Initializing SPIFFS...");
   if (!SPIFFS.begin(true)) {
     Serial.println("SPIFFS Mount Failed - using defaults");
     setDefaultConfig();
   } else {
+    Serial.println("SPIFFS mounted successfully");
     // Load configuration
     loadConfig();
   }
 
   // Initialize display
+  Serial.println("Initializing display...");
   display.init(115200);
+  Serial.println("Display initialized");
   display.setRotation(1);  // Horizontal orientation (800×480)
   display.setTextColor(GxEPD_BLACK);
+  Serial.println("Display configured");
 
   // Connect to WiFi and sync time
   syncTime();
@@ -167,8 +173,8 @@ void setDefaultConfig() {
   config.expectedLifespan = 80;
   config.timezone = "America/New_York";
   config.posixTZ = "EST5EDT,M3.2.0,M11.1.0";
-  config.wifiSSID = "";
-  config.wifiPassword = "";
+  config.wifiSSID = WIFI_SSID;
+  config.wifiPassword = WIFI_PASSWORD;
   config.ntpServer = "pool.ntp.org";
   config.specialDayCount = 0;
 }
@@ -284,9 +290,35 @@ int checkSpecialDay(struct tm* now) {
 }
 
 int getBatteryPercent() {
-  // TODO: Implement actual battery reading for reTerminal E1001
-  // For now, return 75% as placeholder
-  return 75;
+  // Enable battery voltage sensing circuit
+  pinMode(21, OUTPUT);
+  digitalWrite(21, HIGH);
+  delay(10);  // Allow voltage to stabilize
+
+  // Read battery voltage on GPIO1
+  int rawValue = analogRead(1);
+
+  // Disable sensing circuit to save power
+  digitalWrite(21, LOW);
+
+  // ESP32-S3 ADC: 12-bit (0-4095), reference voltage 3.3V
+  // Battery voltage is divided, typical range: 3.0V (empty) to 4.2V (full)
+  // Assuming voltage divider ratio of 2:1
+  float voltage = (rawValue / 4095.0) * 3.3 * 2.0;
+
+  // Map voltage to percentage
+  // LiPo: 4.2V = 100%, 3.7V = 50%, 3.0V = 0%
+  int percent;
+  if (voltage >= 4.2) {
+    percent = 100;
+  } else if (voltage <= 3.0) {
+    percent = 0;
+  } else {
+    // Linear mapping between 3.0V and 4.2V
+    percent = (int)((voltage - 3.0) / 1.2 * 100);
+  }
+
+  return constrain(percent, 0, 100);
 }
 
 void renderDisplay() {

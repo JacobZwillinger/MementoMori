@@ -21,3 +21,4 @@ web-preview/verify-test.js
 # Local config with real credentials (never commit)
 arduino/data/config.local.json
 web-preview/config.local.json
+arduino/MementoMori/wifi_credentials.h
