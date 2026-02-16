@@ -48,8 +48,9 @@ struct tm timeinfo;
 bool timeInitialized = false;
 
 void setup() {
-  Serial.begin(115200);
-  Serial.println("\n\nMemento Mori - Initializing...");
+  Serial0.begin(115200);  // UART0 - outputs to /dev/cu.usbserial-110
+  delay(500);
+  Serial0.println("\n\nMemento Mori - Initializing...");
 
   // Configure GPIO3 for ext0 wakeup using RTC GPIO functions
   // This ensures proper pull resistor configuration for wake-from-sleep
@@ -68,31 +69,31 @@ void setup() {
   esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
 
   if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0) {
-    Serial.println("Woke from button press (EXT0)");
+    Serial0.println("Woke from button press (EXT0)");
   } else if (wakeup_reason == ESP_SLEEP_WAKEUP_TIMER) {
-    Serial.println("Woke from timer (midnight update)");
+    Serial0.println("Woke from timer (midnight update)");
   } else {
-    Serial.println("First boot or reset");
+    Serial0.println("First boot or reset");
   }
 
   // Initialize SPIFFS (make non-blocking)
-  Serial.println("Initializing SPIFFS...");
+  Serial0.println("Initializing SPIFFS...");
   if (!SPIFFS.begin(true)) {
-    Serial.println("SPIFFS Mount Failed - using defaults");
+    Serial0.println("SPIFFS Mount Failed - using defaults");
     setDefaultConfig();
   } else {
-    Serial.println("SPIFFS mounted successfully");
+    Serial0.println("SPIFFS mounted successfully");
     // Load configuration
     loadConfig();
   }
 
   // Initialize display
-  Serial.println("Initializing display...");
+  Serial0.println("Initializing display...");
   display.init(115200);
-  Serial.println("Display initialized");
+  Serial0.println("Display initialized");
   display.setRotation(1);  // Horizontal orientation (800×480)
   display.setTextColor(GxEPD_BLACK);
-  Serial.println("Display configured");
+  Serial0.println("Display configured");
 
   // Connect to WiFi and sync time
   syncTime();
@@ -112,17 +113,17 @@ void loop() {
 }
 
 void loadConfig() {
-  Serial.println("Loading configuration...");
+  Serial0.println("Loading configuration...");
 
   // Try local config first (contains real WiFi creds, not checked into git)
   File file = SPIFFS.open("/config.local.json", "r");
   if (file) {
-    Serial.println("Using config.local.json");
+    Serial0.println("Using config.local.json");
   } else {
     file = SPIFFS.open("/config.json", "r");
   }
   if (!file) {
-    Serial.println("Failed to open config file, using defaults");
+    Serial0.println("Failed to open config file, using defaults");
     setDefaultConfig();
     return;
   }
@@ -132,8 +133,8 @@ void loadConfig() {
   file.close();
 
   if (error) {
-    Serial.print("Failed to parse config: ");
-    Serial.println(error.c_str());
+    Serial0.print("Failed to parse config: ");
+    Serial0.println(error.c_str());
     setDefaultConfig();
     return;
   }
@@ -161,11 +162,11 @@ void loadConfig() {
     config.specialDays[i].quote = specialDays[i]["quote"].as<String>();
   }
 
-  Serial.println("Configuration loaded successfully");
-  Serial.print("Birthdate: ");
-  Serial.println(config.birthdate);
-  Serial.print("Special days: ");
-  Serial.println(config.specialDayCount);
+  Serial0.println("Configuration loaded successfully");
+  Serial0.print("Birthdate: ");
+  Serial0.println(config.birthdate);
+  Serial0.print("Special days: ");
+  Serial0.println(config.specialDayCount);
 }
 
 void setDefaultConfig() {
@@ -182,28 +183,28 @@ void setDefaultConfig() {
 void syncTime() {
   // Skip WiFi if no credentials
   if (config.wifiSSID.length() == 0) {
-    Serial.println("No WiFi credentials - skipping time sync");
+    Serial0.println("No WiFi credentials - skipping time sync");
     return;
   }
 
-  Serial.print("Connecting to WiFi: ");
-  Serial.println(config.wifiSSID);
+  Serial0.print("Connecting to WiFi: ");
+  Serial0.println(config.wifiSSID);
 
   WiFi.begin(config.wifiSSID.c_str(), config.wifiPassword.c_str());
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
     delay(500);
-    Serial.print(".");
+    Serial0.print(".");
     attempts++;
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nWiFi connection failed");
+    Serial0.println("\nWiFi connection failed");
     return;
   }
 
-  Serial.println("\nWiFi connected");
+  Serial0.println("\nWiFi connected");
 
   // Configure timezone and NTP
   // Use POSIX TZ string (e.g., "EST5EDT,M3.2.0,M11.1.0"), not Olson names
@@ -212,20 +213,20 @@ void syncTime() {
   tzset();
 
   // Wait for time sync
-  Serial.print("Syncing time");
+  Serial0.print("Syncing time");
   attempts = 0;
   while (!getLocalTime(&timeinfo) && attempts < 10) {
-    Serial.print(".");
+    Serial0.print(".");
     delay(1000);
     attempts++;
   }
 
   if (attempts < 10) {
-    Serial.println("\nTime synchronized");
-    Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+    Serial0.println("\nTime synchronized");
+    Serial0.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
     timeInitialized = true;
   } else {
-    Serial.println("\nTime sync failed");
+    Serial0.println("\nTime sync failed");
   }
 
   // Disconnect WiFi to save power
@@ -324,7 +325,7 @@ int getBatteryPercent() {
 void renderDisplay() {
   // If time not initialized, use hardcoded date for testing (Feb 14, 2026)
   if (!timeInitialized) {
-    Serial.println("Using hardcoded date for testing: Feb 14, 2026");
+    Serial0.println("Using hardcoded date for testing: Feb 14, 2026");
     timeinfo.tm_year = 2026 - 1900;  // Years since 1900
     timeinfo.tm_mon = 1;             // February (0-indexed)
     timeinfo.tm_mday = 14;           // 14th
@@ -338,17 +339,17 @@ void renderDisplay() {
   int specialDayIndex = checkSpecialDay(&timeinfo);
   int batteryPercent = getBatteryPercent();
 
-  Serial.print("Weeks lived: ");
-  Serial.print(weeksLived);
-  Serial.print(" of ");
-  Serial.print(totalWeeks);
-  Serial.print(" | Battery: ");
-  Serial.print(batteryPercent);
-  Serial.println("%");
+  Serial0.print("Weeks lived: ");
+  Serial0.print(weeksLived);
+  Serial0.print(" of ");
+  Serial0.print(totalWeeks);
+  Serial0.print(" | Battery: ");
+  Serial0.print(batteryPercent);
+  Serial0.println("%");
 
   if (specialDayIndex >= 0) {
-    Serial.print("Special day: ");
-    Serial.println(config.specialDays[specialDayIndex].title);
+    Serial0.print("Special day: ");
+    Serial0.println(config.specialDays[specialDayIndex].title);
     renderSpecialDay(config.specialDays[specialDayIndex], batteryPercent);
   } else {
     renderGrid(weeksLived, totalWeeks, batteryPercent);
@@ -434,7 +435,7 @@ void renderGrid(int weeksLived, int totalWeeks, int batteryPercent) {
 
   } while (display.nextPage());
 
-  Serial.println("Vertical grid rendered");
+  Serial0.println("Vertical grid rendered");
 }
 
 void renderSpecialDay(Config::SpecialDay& specialDay, int batteryPercent) {
@@ -525,7 +526,7 @@ void renderSpecialDay(Config::SpecialDay& specialDay, int batteryPercent) {
 
   } while (display.nextPage());
 
-  Serial.println("Special day rendered");
+  Serial0.println("Special day rendered");
 }
 
 void renderError(const char* message) {
@@ -544,13 +545,13 @@ void renderError(const char* message) {
     display.print(message);
   } while (display.nextPage());
 
-  Serial.print("Error: ");
-  Serial.println(message);
+  Serial0.print("Error: ");
+  Serial0.println(message);
 }
 
 void enterDeepSleep() {
   if (!timeInitialized) {
-    Serial.println("Time not initialized, sleeping for 1 hour");
+    Serial0.println("Time not initialized, sleeping for 1 hour");
     esp_sleep_enable_timer_wakeup(3600ULL * 1000000ULL);
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_3, 0);  // Wake on green button
     esp_deep_sleep_start();
@@ -566,16 +567,16 @@ void enterDeepSleep() {
                               (59 - currentMin) * 60 +
                               (60 - currentSec);
 
-  Serial.print("Sleeping for ");
-  Serial.print(secondsUntilMidnight);
-  Serial.println(" seconds until midnight");
+  Serial0.print("Sleeping for ");
+  Serial0.print(secondsUntilMidnight);
+  Serial0.println(" seconds until midnight");
 
   // Enable wake on timer (midnight) AND button press
   esp_sleep_enable_timer_wakeup(secondsUntilMidnight * 1000000ULL);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_3, 0);  // Wake on green button
 
   // Enter deep sleep
-  Serial.println("Entering deep sleep...");
-  Serial.flush();
+  Serial0.println("Entering deep sleep...");
+  Serial0.flush();
   esp_deep_sleep_start();
 }
