@@ -16,11 +16,11 @@
 // Pin mapping from Seeed documentation: CS=10, DC=11, RST=12, BUSY=13
 GxEPD2_BW<GxEPD2_750_T7, GxEPD2_750_T7::HEIGHT> display(GxEPD2_750_T7(/*CS=*/ 10, /*DC=*/ 11, /*RST=*/ 12, /*BUSY=*/ 13));
 
-// Display constants - VERTICAL ORIENTATION (480×800)
+// Display constants - HORIZONTAL ORIENTATION (800×480)
 const int COLS = 52;  // weeks per year (horizontal)
 const int ROWS = 80;  // years of life (vertical)
-const int DISPLAY_WIDTH = 480;
-const int DISPLAY_HEIGHT = 800;
+const int DISPLAY_WIDTH = 800;
+const int DISPLAY_HEIGHT = 480;
 
 // Configuration structure
 struct Config {
@@ -85,7 +85,7 @@ void setup() {
 
   // Initialize display
   display.init(115200);
-  display.setRotation(0);  // Vertical orientation (480×800)
+  display.setRotation(1);  // Horizontal orientation (800×480)
   display.setTextColor(GxEPD_BLACK);
 
   // Connect to WiFi and sync time
@@ -323,6 +323,15 @@ void renderDisplay() {
   }
 }
 
+// Draw WiFi status indicator (top-left corner)
+void drawWiFiStatus() {
+  if (timeInitialized) {
+    // Black dot = WiFi/time sync succeeded
+    display.fillCircle(12, 16, 3, GxEPD_BLACK);
+  }
+  // No dot = time sync failed (using hardcoded date)
+}
+
 // Draw battery indicator as dots (0-5 dots based on percentage)
 void drawBatteryDots(int batteryPercent) {
   int numDots = (batteryPercent + 19) / 20;  // 1-20% = 1 dot, 21-40% = 2 dots, etc.
@@ -384,6 +393,9 @@ void renderGrid(int weeksLived, int totalWeeks, int batteryPercent) {
     display.getTextBounds("MEMENTO MORI", 0, 0, &x1, &y1, &w, &h);
     display.setCursor((DISPLAY_WIDTH - w) / 2, 12);
     display.print("MEMENTO MORI");
+
+    // WiFi status in top left
+    drawWiFiStatus();
 
     // Battery dots in top right
     drawBatteryDots(batteryPercent);
@@ -472,6 +484,9 @@ void renderSpecialDay(Config::SpecialDay& specialDay, int batteryPercent) {
       display.setCursor((DISPLAY_WIDTH - w) / 2, startY + (lineCount * lineHeight));
       display.print(attribution);
     }
+
+    // WiFi status in top left
+    drawWiFiStatus();
 
     // Battery dots still visible on special days
     drawBatteryDots(batteryPercent);
