@@ -10,6 +10,7 @@
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
 #include <driver/rtc_io.h>
+#include <esp_sntp.h>
 #include "wifi_credentials.h"
 
 // Display configuration for reTerminal E1001
@@ -43,9 +44,24 @@ struct Config {
   int specialDayCount;
 } config;
 
+// Built-in special days, used whenever the SPIFFS config is missing or has none.
+// Keep in sync with arduino/data/config.json.
+const char* DEFAULT_SPECIAL_DAYS[][3] = {
+  {"08-17", "Your Birthday",
+   "It is not that we have a short time to live, but that we waste much of it.\n— Seneca"},
+  {"09-26", "Friend's Birthday",
+   "Never say about anything, 'I have lost it,' but only, 'I have returned it.'\n— Epictetus"},
+  {"01-16", "January 16",
+   "You could leave life right now. Let that determine what you do and say and think.\n— Marcus Aurelius"},
+  {"10-16", "October 16",
+   "He who fears death will never do anything worthy of a living man.\n— Seneca"},
+};
+const int DEFAULT_SPECIAL_DAY_COUNT = sizeof(DEFAULT_SPECIAL_DAYS) / sizeof(DEFAULT_SPECIAL_DAYS[0]);
+
 // Time tracking
 struct tm timeinfo;
-bool timeInitialized = false;
+bool timeInitialized = false;  // NTP sync succeeded this wake (drives the WiFi dot)
+bool timeValid = false;        // We have a trustworthy local time (NTP or RTC kept through deep sleep)
 
 void setup() {
   Serial0.begin(115200);  // UART0 - outputs to /dev/cu.usbserial-110
@@ -76,16 +92,22 @@ void setup() {
     Serial0.println("First boot or reset");
   }
 
-  // Initialize SPIFFS (make non-blocking)
+  // Start from built-in defaults; config files only override them
+  setDefaultConfig();
+
+  // Mount SPIFFS without auto-formatting, so a mount hiccup never erases the config
   Serial0.println("Initializing SPIFFS...");
-  if (!SPIFFS.begin(true)) {
-    Serial0.println("SPIFFS Mount Failed - using defaults");
-    setDefaultConfig();
+  if (!SPIFFS.begin(false)) {
+    Serial0.println("SPIFFS mount failed - using built-in defaults");
   } else {
     Serial0.println("SPIFFS mounted successfully");
-    // Load configuration
     loadConfig();
   }
+
+  // Apply the timezone before any time read. Env vars don't survive deep sleep,
+  // and the RTC keeps UTC, so this must be set on every wake, WiFi or not.
+  setenv("TZ", config.posixTZ.c_str(), 1);
+  tzset();
 
   // Initialize display
   Serial0.println("Initializing display...");
@@ -112,61 +134,92 @@ void loop() {
   // Never reached - device resets after deep sleep
 }
 
+// A WiFi value is usable if it's present and isn't the template placeholder
+bool isRealWifiValue(const String& v) {
+  return v.length() > 0 && v != "null" && !v.startsWith("YOUR_");
+}
+
+// Read a JSON config file into doc. Returns false if missing or unparseable.
+bool readJsonFile(const char* path, JsonDocument& doc) {
+  File file = SPIFFS.open(path, "r");
+  if (!file) return false;
+  DeserializationError error = deserializeJson(doc, file);
+  file.close();
+  if (error) {
+    Serial0.print("Failed to parse ");
+    Serial0.print(path);
+    Serial0.print(": ");
+    Serial0.println(error.c_str());
+    return false;
+  }
+  return true;
+}
+
+// Override WiFi settings from a parsed config, ignoring placeholders
+void applyWifi(JsonDocument& doc) {
+  String ssid = doc["wifi"]["ssid"] | "";
+  String password = doc["wifi"]["password"] | "";
+  if (isRealWifiValue(ssid)) {
+    config.wifiSSID = ssid;
+    config.wifiPassword = password;
+  }
+  if (doc["wifi"]["ntpServer"].is<const char*>()) {
+    config.ntpServer = doc["wifi"]["ntpServer"].as<String>();
+  }
+}
+
+// config.json supplies everything; config.local.json (gitignored) only supplies
+// WiFi credentials, so the two files can't disagree about birthdate or special days.
+// Anything missing keeps its built-in default from setDefaultConfig().
 void loadConfig() {
   Serial0.println("Loading configuration...");
 
-  // Try local config first (contains real WiFi creds, not checked into git)
-  File file = SPIFFS.open("/config.local.json", "r");
-  if (file) {
-    Serial0.println("Using config.local.json");
+  DynamicJsonDocument doc(4096);
+  if (readJsonFile("/config.json", doc)) {
+    Serial0.println("Loaded config.json");
+
+    if (doc["person"]["birthdate"].is<const char*>()) {
+      config.birthdate = doc["person"]["birthdate"].as<String>();
+    }
+    config.expectedLifespan = doc["person"]["expectedLifespan"] | config.expectedLifespan;
+    if (doc["person"]["timezone"].is<const char*>()) {
+      config.timezone = doc["person"]["timezone"].as<String>();
+    }
+    if (doc["person"]["posixTZ"].is<const char*>()) {
+      config.posixTZ = doc["person"]["posixTZ"].as<String>();
+    }
+    applyWifi(doc);
+
+    // Only replace the built-in special days if the file actually lists some
+    JsonArray specialDays = doc["specialDays"];
+    if (!specialDays.isNull() && specialDays.size() > 0) {
+      config.specialDayCount = min((int)specialDays.size(), 10);
+      for (int i = 0; i < config.specialDayCount; i++) {
+        config.specialDays[i].date = specialDays[i]["date"].as<String>();
+        config.specialDays[i].title = specialDays[i]["title"].as<String>();
+        config.specialDays[i].quote = specialDays[i]["quote"].as<String>();
+      }
+    }
   } else {
-    file = SPIFFS.open("/config.json", "r");
-  }
-  if (!file) {
-    Serial0.println("Failed to open config file, using defaults");
-    setDefaultConfig();
-    return;
+    Serial0.println("No usable config.json - using built-in defaults");
   }
 
-  StaticJsonDocument<2048> doc;
-  DeserializationError error = deserializeJson(doc, file);
-  file.close();
-
-  if (error) {
-    Serial0.print("Failed to parse config: ");
-    Serial0.println(error.c_str());
-    setDefaultConfig();
-    return;
+  doc.clear();
+  if (readJsonFile("/config.local.json", doc)) {
+    Serial0.println("Applied WiFi settings from config.local.json");
+    applyWifi(doc);
   }
 
-  // Parse person config
-  config.birthdate = doc["person"]["birthdate"].as<String>();
-  config.expectedLifespan = doc["person"]["expectedLifespan"] | 80;
-  config.timezone = doc["person"]["timezone"] | "America/New_York";
-
-  // Parse WiFi config
-  config.wifiSSID = doc["wifi"]["ssid"].as<String>();
-  config.wifiPassword = doc["wifi"]["password"].as<String>();
-  config.ntpServer = doc["wifi"]["ntpServer"] | "pool.ntp.org";
-
-  // Parse POSIX timezone string (required for ESP32 setenv TZ)
-  config.posixTZ = doc["person"]["posixTZ"] | "EST5EDT,M3.2.0,M11.1.0";
-
-  // Parse special days
-  JsonArray specialDays = doc["specialDays"];
-  config.specialDayCount = min((int)specialDays.size(), 10);
-
-  for (int i = 0; i < config.specialDayCount; i++) {
-    config.specialDays[i].date = specialDays[i]["date"].as<String>();
-    config.specialDays[i].title = specialDays[i]["title"].as<String>();
-    config.specialDays[i].quote = specialDays[i]["quote"].as<String>();
-  }
-
-  Serial0.println("Configuration loaded successfully");
   Serial0.print("Birthdate: ");
   Serial0.println(config.birthdate);
-  Serial0.print("Special days: ");
-  Serial0.println(config.specialDayCount);
+  Serial0.print("Special days (");
+  Serial0.print(config.specialDayCount);
+  Serial0.print("):");
+  for (int i = 0; i < config.specialDayCount; i++) {
+    Serial0.print(" ");
+    Serial0.print(config.specialDays[i].date);
+  }
+  Serial0.println();
 }
 
 void setDefaultConfig() {
@@ -177,7 +230,13 @@ void setDefaultConfig() {
   config.wifiSSID = WIFI_SSID;
   config.wifiPassword = WIFI_PASSWORD;
   config.ntpServer = "pool.ntp.org";
-  config.specialDayCount = 0;
+
+  config.specialDayCount = min(DEFAULT_SPECIAL_DAY_COUNT, 10);
+  for (int i = 0; i < config.specialDayCount; i++) {
+    config.specialDays[i].date = DEFAULT_SPECIAL_DAYS[i][0];
+    config.specialDays[i].title = DEFAULT_SPECIAL_DAYS[i][1];
+    config.specialDays[i].quote = DEFAULT_SPECIAL_DAYS[i][2];
+  }
 }
 
 void syncTime() {
@@ -208,20 +267,19 @@ void syncTime() {
 
   // Configure timezone and NTP
   // Use POSIX TZ string (e.g., "EST5EDT,M3.2.0,M11.1.0"), not Olson names
-  configTime(0, 0, config.ntpServer.c_str());
-  setenv("TZ", config.posixTZ.c_str(), 1);
-  tzset();
+  configTzTime(config.posixTZ.c_str(), config.ntpServer.c_str());
 
-  // Wait for time sync
+  // Wait for an actual NTP response. getLocalTime() alone isn't enough: the RTC
+  // keeps time through deep sleep, so it would succeed before NTP ever answers.
   Serial0.print("Syncing time");
   attempts = 0;
-  while (!getLocalTime(&timeinfo) && attempts < 10) {
+  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && attempts < 20) {
     Serial0.print(".");
-    delay(1000);
+    delay(500);
     attempts++;
   }
 
-  if (attempts < 10) {
+  if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED && getLocalTime(&timeinfo, 1000)) {
     Serial0.println("\nTime synchronized");
     Serial0.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
     timeInitialized = true;
@@ -273,6 +331,8 @@ int calculateWeeksLived(const String& birthdate, struct tm* now) {
   time_t lastBirthdayTime = mktime(&lastBirthday);
   int daysSinceLastBirthday = (nowTime - lastBirthdayTime) / (60 * 60 * 24);
   int weeksSinceLastBirthday = daysSinceLastBirthday / 7;
+  // A year is 52 weeks + 1-2 days; don't let those extra days spill into next year's row
+  if (weeksSinceLastBirthday > 51) weeksSinceLastBirthday = 51;
 
   return (age * 52) + weeksSinceLastBirthday;
 }
@@ -324,14 +384,20 @@ int getBatteryPercent() {
 
 void renderDisplay() {
   // If time not initialized, use hardcoded date for testing (Feb 14, 2026)
-  if (!timeInitialized) {
-    Serial0.println("Using hardcoded date for testing: Feb 14, 2026");
-    timeinfo.tm_year = 2026 - 1900;  // Years since 1900
-    timeinfo.tm_mon = 1;             // February (0-indexed)
-    timeinfo.tm_mday = 14;           // 14th
-    timeinfo.tm_hour = 12;
-    timeinfo.tm_min = 0;
-    timeinfo.tm_sec = 0;
+  timeValid = timeInitialized;
+
+  // No NTP this wake: fall back to the RTC, which keeps time through deep sleep.
+  // A year before 2024 means the clock was never set (first boot / power loss).
+  if (!timeValid) {
+    if (getLocalTime(&timeinfo, 100) && timeinfo.tm_year + 1900 >= 2024) {
+      timeValid = true;
+      Serial0.println("NTP unavailable - using RTC time");
+      Serial0.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
+    } else {
+      Serial0.println("No valid time available");
+      renderError("Waiting for time sync");
+      return;
+    }
   }
 
   int weeksLived = calculateWeeksLived(config.birthdate, &timeinfo);
@@ -550,8 +616,8 @@ void renderError(const char* message) {
 }
 
 void enterDeepSleep() {
-  if (!timeInitialized) {
-    Serial0.println("Time not initialized, sleeping for 1 hour");
+  if (!timeValid) {
+    Serial0.println("No valid time, sleeping for 1 hour");
     esp_sleep_enable_timer_wakeup(3600ULL * 1000000ULL);
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_3, 0);  // Wake on green button
     esp_deep_sleep_start();

@@ -39,7 +39,8 @@ function calculateWeeksLived(birthdate, referenceDate = new Date()) {
         lastBirthday.setFullYear(lastBirthday.getFullYear() - 1);
     }
 
-    const weeksSinceLastBirthday = Math.floor((now - lastBirthday) / (1000 * 60 * 60 * 24 * 7));
+    // Cap at 51: a year is 52 weeks + 1-2 days, which shouldn't spill into next year's row
+    const weeksSinceLastBirthday = Math.min(51, Math.floor((now - lastBirthday) / (1000 * 60 * 60 * 24 * 7)));
 
     // Total weeks = complete years × 52 + weeks into current year
     return (age * 52) + weeksSinceLastBirthday;
