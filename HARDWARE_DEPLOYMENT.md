@@ -227,13 +227,19 @@ Serial.println(voltage);
 
 ## Updating Configuration
 
-To change special days or quotes without re-uploading code:
+To change special days or quotes, edit `arduino/data/config.json` and push it to `main` on GitHub.
 
-1. Edit `arduino/data/config.json`
-2. Run **Tools → ESP32 Sketch Data Upload**
-3. Device will use new config on next midnight update
+The device downloads that file on every WiFi sync (midnight, or a green-button press), applies it, and caches it in SPIFFS for offline days. No flashing or SPIFFS upload needed. WiFi values in the GitHub copy are ignored; credentials come from `wifi_credentials.h` or `config.local.json`.
 
-**No need to re-upload the sketch!**
+If nothing can be loaded at all, the firmware falls back to the special days built into `DEFAULT_SPECIAL_DAYS` in the sketch.
+
+## Wireless Firmware Updates
+
+1. Hold the green button for 2 seconds. The screen shows **UPDATE MODE** with the device's IP.
+2. In Arduino IDE, choose **Tools → Port → memento-mori** (network port) and click Upload.
+3. The device reboots into the new firmware. Update mode closes after 5 minutes, or press the green button to cancel.
+
+Set a password by adding `#define OTA_PASSWORD "..."` to `wifi_credentials.h` (recommended).
 
 ---
 

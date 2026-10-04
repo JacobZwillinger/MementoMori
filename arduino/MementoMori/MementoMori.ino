@@ -11,7 +11,24 @@
 #include <SPIFFS.h>
 #include <driver/rtc_io.h>
 #include <esp_sntp.h>
+#include <HTTPClient.h>
+#include <WiFiClientSecure.h>
+#include <ArduinoOTA.h>
 #include "wifi_credentials.h"
+
+// Optional: define OTA_PASSWORD in wifi_credentials.h to require a password for wireless uploads
+#ifndef OTA_PASSWORD
+#define OTA_PASSWORD ""
+#endif
+
+// Special days and quotes are pulled from this file on every WiFi sync, so editing
+// config.json on GitHub updates the device without flashing. WiFi values in it are ignored.
+const char* REMOTE_CONFIG_URL =
+  "https://raw.githubusercontent.com/JacobZwillinger/MementoMori/main/arduino/data/config.json";
+
+const char* OTA_HOSTNAME = "memento-mori";
+const unsigned long UPDATE_MODE_TIMEOUT_MS = 5UL * 60UL * 1000UL;  // 5 minutes
+const unsigned long UPDATE_MODE_HOLD_MS = 2000;                     // hold green button 2s
 
 // Display configuration for reTerminal E1001
 // 7.5" 800x480 monochrome e-paper
@@ -117,6 +134,11 @@ void setup() {
   display.setTextColor(GxEPD_BLACK);
   Serial0.println("Display configured");
 
+  // Green button held for 2s after waking = wireless update mode
+  if (wakeup_reason == ESP_SLEEP_WAKEUP_EXT0 && greenButtonHeld(UPDATE_MODE_HOLD_MS)) {
+    runUpdateMode();  // Restarts the device when done; does not return
+  }
+
   // Connect to WiFi and sync time
   syncTime();
 
@@ -177,7 +199,35 @@ void loadConfig() {
   DynamicJsonDocument doc(4096);
   if (readJsonFile("/config.json", doc)) {
     Serial0.println("Loaded config.json");
+    applyConfigDoc(doc);
+  } else {
+    Serial0.println("No usable config.json - using built-in defaults");
+  }
 
+  doc.clear();
+  if (readJsonFile("/config.local.json", doc)) {
+    Serial0.println("Applied WiFi settings from config.local.json");
+    applyWifi(doc);
+  }
+
+  printConfigSummary();
+}
+
+void printConfigSummary() {
+  Serial0.print("Birthdate: ");
+  Serial0.println(config.birthdate);
+  Serial0.print("Special days (");
+  Serial0.print(config.specialDayCount);
+  Serial0.print("):");
+  for (int i = 0; i < config.specialDayCount; i++) {
+    Serial0.print(" ");
+    Serial0.print(config.specialDays[i].date);
+  }
+  Serial0.println();
+}
+
+// Apply a parsed config.json. Missing fields keep their current values.
+void applyConfigDoc(JsonDocument& doc) {
     if (doc["person"]["birthdate"].is<const char*>()) {
       config.birthdate = doc["person"]["birthdate"].as<String>();
     }
@@ -200,26 +250,66 @@ void loadConfig() {
         config.specialDays[i].quote = specialDays[i]["quote"].as<String>();
       }
     }
-  } else {
-    Serial0.println("No usable config.json - using built-in defaults");
+}
+
+// Fetch config.json from GitHub (WiFi must be connected). If it parses, apply it
+// and cache it to SPIFFS so it survives power loss and offline days. Only writes
+// flash when the content actually changed.
+void fetchRemoteConfig() {
+  Serial0.println("Fetching remote config...");
+
+  WiFiClientSecure client;
+  client.setInsecure();  // Public quotes file; worst case a MITM changes a quote
+  HTTPClient http;
+  http.setTimeout(8000);
+  if (!http.begin(client, REMOTE_CONFIG_URL)) {
+    Serial0.println("Remote config: could not start request");
+    return;
   }
 
-  doc.clear();
-  if (readJsonFile("/config.local.json", doc)) {
-    Serial0.println("Applied WiFi settings from config.local.json");
-    applyWifi(doc);
+  int code = http.GET();
+  if (code != HTTP_CODE_OK) {
+    Serial0.print("Remote config: HTTP ");
+    Serial0.println(code);
+    http.end();
+    return;
   }
 
-  Serial0.print("Birthdate: ");
-  Serial0.println(config.birthdate);
-  Serial0.print("Special days (");
-  Serial0.print(config.specialDayCount);
-  Serial0.print("):");
-  for (int i = 0; i < config.specialDayCount; i++) {
-    Serial0.print(" ");
-    Serial0.print(config.specialDays[i].date);
+  String body = http.getString();
+  http.end();
+  if (body.length() == 0 || body.length() > 8192) {
+    Serial0.println("Remote config: empty or too large, ignoring");
+    return;
   }
-  Serial0.println();
+
+  DynamicJsonDocument doc(4096);
+  DeserializationError error = deserializeJson(doc, body);
+  if (error) {
+    Serial0.print("Remote config: parse failed: ");
+    Serial0.println(error.c_str());
+    return;
+  }
+
+  applyConfigDoc(doc);
+  Serial0.println("Remote config applied");
+  printConfigSummary();
+
+  // Cache it, formatting SPIFFS only if it has never been set up
+  if (!SPIFFS.begin(false)) {
+    Serial0.println("Formatting SPIFFS for config cache...");
+    if (!SPIFFS.begin(true)) return;
+  }
+  File existing = SPIFFS.open("/config.json", "r");
+  String cached = existing ? existing.readString() : "";
+  if (existing) existing.close();
+  if (cached != body) {
+    File out = SPIFFS.open("/config.json", "w");
+    if (out) {
+      out.print(body);
+      out.close();
+      Serial0.println("Remote config cached to SPIFFS");
+    }
+  }
 }
 
 void setDefaultConfig() {
@@ -286,6 +376,9 @@ void syncTime() {
   } else {
     Serial0.println("\nTime sync failed");
   }
+
+  // While WiFi is up, pull the latest special days from GitHub
+  fetchRemoteConfig();
 
   // Disconnect WiFi to save power
   WiFi.disconnect(true);
@@ -645,4 +738,103 @@ void enterDeepSleep() {
   Serial0.println("Entering deep sleep...");
   Serial0.flush();
   esp_deep_sleep_start();
+}
+
+// ---------------------------------------------------------------------------
+// Wireless update mode (OTA)
+// ---------------------------------------------------------------------------
+
+// GPIO3 is an RTC pin (configured in setup for ext0 wake), so read it via rtc_gpio
+bool greenButtonPressed() {
+  return rtc_gpio_get_level(GPIO_NUM_3) == 0;
+}
+
+// True if the green button stays pressed for the whole duration
+bool greenButtonHeld(unsigned long durationMs) {
+  unsigned long start = millis();
+  while (millis() - start < durationMs) {
+    if (!greenButtonPressed()) return false;
+    delay(20);
+  }
+  return true;
+}
+
+void drawCenteredLine(const String& text, int y, int textSize) {
+  int16_t x1, y1;
+  uint16_t w, h;
+  display.setTextSize(textSize);
+  display.getTextBounds(text, 0, 0, &x1, &y1, &w, &h);
+  display.setCursor((DISPLAY_WIDTH - w) / 2, y);
+  display.print(text);
+}
+
+void renderUpdateScreen(const String& ip) {
+  display.setFullWindow();
+  display.firstPage();
+  do {
+    display.fillScreen(GxEPD_WHITE);
+    display.setFont(NULL);
+    display.setTextColor(GxEPD_BLACK);
+    drawCenteredLine("UPDATE MODE", 300, 3);
+    drawCenteredLine(String(OTA_HOSTNAME) + ".local", 370, 2);
+    drawCenteredLine(ip, 400, 2);
+    drawCenteredLine("Upload from Arduino IDE within 5 min", 460, 1);
+    drawCenteredLine("Press green button to cancel", 480, 1);
+  } while (display.nextPage());
+}
+
+void runUpdateMode() {
+  Serial0.println("Entering wireless update mode");
+
+  WiFi.mode(WIFI_STA);
+  WiFi.setHostname(OTA_HOSTNAME);
+  WiFi.begin(config.wifiSSID.c_str(), config.wifiPassword.c_str());
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
+    delay(250);
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    renderError("Update mode: no WiFi");
+    delay(3000);
+    ESP.restart();
+  }
+
+  String ip = WiFi.localIP().toString();
+  Serial0.print("Update mode ready at ");
+  Serial0.println(ip);
+
+  ArduinoOTA.setHostname(OTA_HOSTNAME);
+  if (strlen(OTA_PASSWORD) > 0) {
+    ArduinoOTA.setPassword(OTA_PASSWORD);
+  } else {
+    Serial0.println("Warning: no OTA_PASSWORD set - anyone on your network can upload");
+  }
+  ArduinoOTA.onStart([]() { Serial0.println("OTA upload started"); });
+  ArduinoOTA.onEnd([]() { Serial0.println("OTA upload finished - rebooting"); });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial0.print("OTA error: ");
+    Serial0.println(error);
+  });
+  ArduinoOTA.begin();
+
+  renderUpdateScreen(ip);
+
+  // Wait for the hold to be released so it doesn't count as "cancel"
+  while (greenButtonPressed()) delay(20);
+
+  start = millis();
+  while (millis() - start < UPDATE_MODE_TIMEOUT_MS) {
+    ArduinoOTA.handle();  // A successful upload reboots the device from in here
+    if (greenButtonPressed()) {
+      delay(50);
+      if (greenButtonPressed()) {
+        Serial0.println("Update mode cancelled");
+        break;
+      }
+    }
+    delay(10);
+  }
+
+  Serial0.println("Leaving update mode - restarting");
+  ESP.restart();  // Reboots into the normal display
 }
